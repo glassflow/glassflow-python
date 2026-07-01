@@ -1,0 +1,84 @@
+import pytest
+
+from glassflow_sdk.config import DEFAULT_ENDPOINT, GlassflowConfig, resolve_config
+
+ENV_VARS = [
+    "GLASSFLOW_ENDPOINT",
+    "GLASSFLOW_API_KEY",
+    "GLASSFLOW_SERVICE_NAME",
+    "GLASSFLOW_DISABLED",
+]
+
+
+@pytest.fixture(autouse=True)
+def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_explicit_arguments_win() -> None:
+    config = resolve_config(
+        endpoint="https://example.com",
+        api_key="secret",
+        service_name="my-agent",
+    )
+    assert config.endpoint == "https://example.com"
+    assert config.api_key == "secret"
+    assert config.service_name == "my-agent"
+
+
+def test_environment_variables_used_when_args_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GLASSFLOW_ENDPOINT", "https://env.example.com")
+    monkeypatch.setenv("GLASSFLOW_API_KEY", "env-key")
+    monkeypatch.setenv("GLASSFLOW_SERVICE_NAME", "env-agent")
+
+    config = resolve_config()
+
+    assert config.endpoint == "https://env.example.com"
+    assert config.api_key == "env-key"
+    assert config.service_name == "env-agent"
+
+
+def test_explicit_arguments_override_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GLASSFLOW_ENDPOINT", "https://env.example.com")
+    config = resolve_config(endpoint="https://arg.example.com")
+    assert config.endpoint == "https://arg.example.com"
+
+
+def test_defaults_when_nothing_provided() -> None:
+    config = resolve_config()
+    assert config.endpoint == DEFAULT_ENDPOINT
+    assert config.api_key is None
+    assert config.service_name == "unknown_service"
+    assert config.disabled is False
+
+
+def test_api_key_injected_as_bearer_header() -> None:
+    config = resolve_config(api_key="secret")
+    assert config.headers["Authorization"] == "Bearer secret"
+
+
+def test_explicit_authorization_header_not_overwritten() -> None:
+    config = resolve_config(api_key="secret", headers={"Authorization": "Bearer custom"})
+    assert config.headers["Authorization"] == "Bearer custom"
+
+
+def test_traces_endpoint_appends_path_and_strips_trailing_slash() -> None:
+    assert resolve_config(endpoint="https://x.dev").traces_endpoint == "https://x.dev/v1/traces"
+    assert resolve_config(endpoint="https://x.dev/").traces_endpoint == "https://x.dev/v1/traces"
+
+
+@pytest.mark.parametrize("value", ["true", "1", "yes", "TRUE"])
+def test_disabled_via_environment(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("GLASSFLOW_DISABLED", value)
+    assert resolve_config().disabled is True
+
+
+def test_config_is_immutable() -> None:
+    config = resolve_config()
+    with pytest.raises((AttributeError, TypeError)):
+        config.endpoint = "mutated"  # type: ignore[misc]
+
+
+def test_returns_config_instance() -> None:
+    assert isinstance(resolve_config(), GlassflowConfig)
