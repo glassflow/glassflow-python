@@ -1,4 +1,4 @@
-# GlassFlow Instrumentation SDK (Python)
+# GlassFlow Python SDK
 
 OpenTelemetry-native tracing for AI agents and LLM applications. `glassflow-ai`
 emits [OpenTelemetry GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
