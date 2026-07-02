@@ -1,4 +1,4 @@
-# glassflow-sdk (Python)
+# GlassFlow Instrumentation SDK (Python)
 
 OpenTelemetry-native tracing for AI agents and LLM applications. `glassflow-sdk`
 emits [OpenTelemetry GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
@@ -47,6 +47,20 @@ uv run ruff check . && uv run ruff format --check .
 uv run mypy
 ```
 
+## Releasing
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please)
+and published to PyPI via Trusted Publishing.
+
+1. Merge changes to `main` using [Conventional Commits](https://www.conventionalcommits.org/)
+   (`feat:` → minor, `fix:` → patch, `feat!:`/`BREAKING CHANGE` → major).
+2. release-please keeps a **Release PR** open that bumps `__version__` and updates
+   `CHANGELOG.md`. Merge it when you want to cut a release.
+3. Merging tags `vX.Y.Z`, creates a GitHub Release, and publishes to PyPI automatically.
+
+Non-conventional commits are ignored for versioning.
+
 ## License
 
 MIT
+
