@@ -1,6 +1,7 @@
 """LLM generation capture helpers.
 
-`start_generation` opens an LLM-kind span and returns a `Generation` handle for
+``start_as_current_generation`` (context manager) and ``start_generation`` (manual,
+requires ``.end()``) open an LLM-kind span and return a ``Generation`` handle for
 recording gen_ai-native attributes (messages, model, usage, finish reason). LLM
 spans are therefore readable by any gen_ai-compatible consumer.
 """
@@ -66,8 +67,36 @@ class Generation:
     def set_finish_reason(self, reasons: list[str]) -> None:
         self._span.set_attribute(GEN_AI_RESPONSE_FINISH_REASONS, reasons)
 
+    def update(self, *, input: Messages | None = None, output: Messages | None = None) -> None:
+        if input is not None:
+            self.set_input(input)
+        if output is not None:
+            self.set_output(output)
 
-@contextmanager
+    def end(self) -> None:
+        self._span.end()
+
+
+def _configure(
+    generation: Generation,
+    *,
+    model: str | None,
+    system: str | None,
+    input: Messages | None,
+    model_parameters: dict[str, Any] | None,
+) -> None:
+    span = generation._span
+    set_span_kind(span, SpanKind.LLM)
+    if model is not None:
+        span.set_attribute(GEN_AI_REQUEST_MODEL, model)
+    if system is not None:
+        span.set_attribute(GEN_AI_SYSTEM, system)
+    for key, value in (model_parameters or {}).items():
+        span.set_attribute(f"{GEN_AI_REQUEST_PREFIX}{key}", value)
+    if input is not None:
+        generation.set_input(input)
+
+
 def start_generation(
     name: str,
     *,
@@ -75,18 +104,34 @@ def start_generation(
     system: str | None = None,
     input: Messages | None = None,
     model_parameters: dict[str, Any] | None = None,
+) -> Generation:
+    """Create an LLM-kind span and return a ``Generation``. You MUST call ``.end()``.
+
+    Manual counterpart to ``start_as_current_generation``: not set as current, no
+    auto-recording of exceptions.
+    """
+    span = trace.get_tracer(TRACER_NAME, __version__).start_span(name)
+    generation = Generation(span)
+    _configure(
+        generation, model=model, system=system, input=input, model_parameters=model_parameters
+    )
+    return generation
+
+
+@contextmanager
+def start_as_current_generation(
+    name: str,
+    *,
+    model: str | None = None,
+    system: str | None = None,
+    input: Messages | None = None,
+    model_parameters: dict[str, Any] | None = None,
 ) -> Iterator[Generation]:
-    """Open an LLM-kind span and yield a `Generation` handle for gen_ai attributes."""
+    """Open an LLM-kind span as the current span and yield a ``Generation``; auto-ends."""
     tracer = trace.get_tracer(TRACER_NAME, __version__)
     with tracer.start_as_current_span(name) as span:
-        set_span_kind(span, SpanKind.LLM)
-        if model is not None:
-            span.set_attribute(GEN_AI_REQUEST_MODEL, model)
-        if system is not None:
-            span.set_attribute(GEN_AI_SYSTEM, system)
-        for key, value in (model_parameters or {}).items():
-            span.set_attribute(f"{GEN_AI_REQUEST_PREFIX}{key}", value)
         generation = Generation(span)
-        if input is not None:
-            generation.set_input(input)
+        _configure(
+            generation, model=model, system=system, input=input, model_parameters=model_parameters
+        )
         yield generation
