@@ -39,11 +39,19 @@ formatter/linter (no black/isort/flake8). Commit `uv.lock`.
 
 ## OpenTelemetry conventions
 
-- The canonical wire format is **OTel GenAI semantic conventions** (`gen_ai.*`).
-  Do not invent bespoke attribute namespaces for things OTel already defines.
+- **Convention-native** wire format — emit established conventions directly, never
+  a bespoke `glassflow.*` namespace (we own the backend, and this gives free
+  third-party ingestion via the normalizer). Pick the richest convention per concept:
+  - **Span kind:** `openinference.span.kind` (`SpanKind` enum) — gen_ai's
+    `operation.name` is not a sufficient kind taxonomy. Set `gen_ai.operation.name`
+    too where it maps.
+  - **LLM/generation spans:** fully **gen_ai-native** (`gen_ai.input.messages` /
+    `output.messages`, `gen_ai.request.model`, `gen_ai.usage.*`) — see `generation.py`.
+  - **Generic/tool/retriever spans:** `input.value` / `output.value` (OpenInference);
+    gen_ai has no generic non-LLM I/O.
 - Build on the OTel SDK primitives (`TracerProvider`, `BatchSpanProcessor`,
   OTLP/HTTP exporter). Don't hand-roll tracing internals.
-- Respect OTel norms (e.g. `service.name` resource attribute).
+- All attribute keys live in `semconv.py`. Respect OTel norms (e.g. `service.name`).
 
 ## Testing — TDD (required)
 
