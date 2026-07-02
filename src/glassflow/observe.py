@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import functools
 import inspect
-import json
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
@@ -18,25 +17,14 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from . import __version__
+from ._serde import serialize
 from .semconv import INPUT_VALUE, OUTPUT_VALUE, TRACER_NAME, SpanKind, set_span_kind
-
-_MAX_ATTR_CHARS = 8192
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def _serialize(value: Any) -> str:
-    try:
-        text = json.dumps(value, default=repr)
-    except (TypeError, ValueError):
-        text = repr(value)
-    if len(text) > _MAX_ATTR_CHARS:
-        text = text[:_MAX_ATTR_CHARS] + "…(truncated)"
-    return text
-
-
 def _serialize_inputs(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
-    return _serialize({"args": args, "kwargs": kwargs})
+    return serialize({"args": args, "kwargs": kwargs})
 
 
 def _record_exception(span: trace.Span, exc: BaseException) -> None:
@@ -80,7 +68,7 @@ def observe(
 
         def _set_output(span: trace.Span, result: Any) -> None:
             if capture_output:
-                span.set_attribute(OUTPUT_VALUE, _serialize(result))
+                span.set_attribute(OUTPUT_VALUE, serialize(result))
 
         if inspect.isasyncgenfunction(fn):
 
