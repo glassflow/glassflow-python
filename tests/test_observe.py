@@ -5,6 +5,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import StatusCode
 
 from glassflow import observe
+from glassflow.semconv import SpanKind
 
 
 @observe
@@ -57,8 +58,8 @@ def test_custom_name(exported_spans: InMemorySpanExporter) -> None:
 def test_captures_input_and_output(exported_spans: InMemorySpanExporter) -> None:
     add(2, 3)
     attrs = exported_spans.get_finished_spans()[0].attributes
-    assert "2" in attrs["glassflow.input"] and "3" in attrs["glassflow.input"]
-    assert attrs["glassflow.output"] == "5"
+    assert "2" in attrs["input.value"] and "3" in attrs["input.value"]
+    assert attrs["output.value"] == "5"
 
 
 def test_exception_records_error_and_reraises(exported_spans: InMemorySpanExporter) -> None:
@@ -84,8 +85,24 @@ def test_generator_spans_iteration(exported_spans: InMemorySpanExporter) -> None
 def test_capture_flags_disable_io(exported_spans: InMemorySpanExporter) -> None:
     secret("hunter2")
     attrs = exported_spans.get_finished_spans()[0].attributes
-    assert "glassflow.input" not in attrs
-    assert "glassflow.output" not in attrs
+    assert "input.value" not in attrs
+    assert "output.value" not in attrs
+
+
+def test_default_kind_is_chain(exported_spans: InMemorySpanExporter) -> None:
+    add(1, 1)
+    attrs = exported_spans.get_finished_spans()[0].attributes
+    assert attrs["openinference.span.kind"] == "CHAIN"
+
+
+def test_kind_override(exported_spans: InMemorySpanExporter) -> None:
+    @observe(kind=SpanKind.TOOL)
+    def search(q: str) -> str:
+        return "result"
+
+    search("hi")
+    attrs = exported_spans.get_finished_spans()[0].attributes
+    assert attrs["openinference.span.kind"] == "TOOL"
 
 
 def test_nested_spans_have_parent(exported_spans: InMemorySpanExporter) -> None:

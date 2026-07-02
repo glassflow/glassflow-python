@@ -9,8 +9,8 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 
 from . import __version__
-from ._constants import TRACER_NAME
 from .config import GlassflowConfig, resolve_config
+from .semconv import TRACER_NAME
 
 
 def build_span_exporter(config: GlassflowConfig) -> SpanExporter:
