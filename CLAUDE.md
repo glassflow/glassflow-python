@@ -51,6 +51,9 @@ formatter/linter (no black/isort/flake8). Commit `uv.lock`.
     gen_ai has no generic non-LLM I/O.
 - Build on the OTel SDK primitives (`TracerProvider`, `BatchSpanProcessor`,
   OTLP/HTTP exporter). Don't hand-roll tracing internals.
+- **Span API naming** (OTel/Langfuse/Laminar convention): `start_as_current_*` =
+  context manager (activates context, auto-ends); bare `start_*` = manual (returns
+  a handle you must `.end()`). Don't invert these.
 - All attribute keys live in `semconv.py`. Respect OTel norms (e.g. `service.name`).
 
 ## Testing — TDD (required)

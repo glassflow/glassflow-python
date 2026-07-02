@@ -17,16 +17,31 @@ pip install glassflow-ai
 
 ```python
 import glassflow
+from glassflow import observe, start_as_current_generation, start_as_current_span
+from glassflow.semconv import SpanKind
 
 glassflow.init(
     api_key="glassflow_...",          # or set GLASSFLOW_API_KEY
     service_name="my-agent",          # or set GLASSFLOW_SERVICE_NAME
 )
 
-tracer = glassflow.get_tracer()
-with tracer.start_as_current_span("my-operation"):
-    ...
+# 1. Decorator — trace a whole function
+@observe
+def handle(query: str) -> str: ...
+
+# 2. Context manager — trace a block
+with start_as_current_span("retrieve", kind=SpanKind.RETRIEVER) as obs:
+    obs.set_output(docs)
+
+# 3. LLM generations — gen_ai-native
+with start_as_current_generation("chat", model="gpt-4o", input=messages) as gen:
+    gen.set_output(reply)
+    gen.set_usage(input_tokens=42, output_tokens=17)
 ```
+
+Each surface has a **manual** variant for lifetimes a `with` block can't express
+(streaming, callbacks): `start_span(...)` / `start_generation(...)` return a handle
+you `.update()` and must `.end()` yourself.
 
 Configuration is resolved from explicit arguments first, then environment
 variables:
