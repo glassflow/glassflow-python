@@ -9,9 +9,8 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 
 from . import __version__
+from ._constants import TRACER_NAME
 from .config import GlassflowConfig, resolve_config
-
-DEFAULT_TRACER_NAME = "glassflow"
 
 
 def build_span_exporter(config: GlassflowConfig) -> SpanExporter:
@@ -29,8 +28,8 @@ class GlassflowClient:
         self._provider = provider
         self.config = config
 
-    def get_tracer(self, name: str = DEFAULT_TRACER_NAME) -> trace.Tracer:
-        return self._provider.get_tracer(name)
+    def get_tracer(self, name: str = TRACER_NAME) -> trace.Tracer:
+        return self._provider.get_tracer(name, __version__)
 
     def flush(self, timeout_millis: int = 30_000) -> bool:
         """Force-flush pending spans. Returns False on timeout."""
@@ -88,6 +87,6 @@ def init(
     return GlassflowClient(provider, config)
 
 
-def get_tracer(name: str = DEFAULT_TRACER_NAME) -> trace.Tracer:
+def get_tracer(name: str = TRACER_NAME) -> trace.Tracer:
     """Return a tracer from the globally configured provider."""
-    return trace.get_tracer(name)
+    return trace.get_tracer(name, __version__)
