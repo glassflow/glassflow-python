@@ -18,7 +18,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from . import __version__
-from ._constants import INPUT_ATTR, OUTPUT_ATTR, TRACER_NAME
+from .semconv import INPUT_VALUE, OUTPUT_VALUE, TRACER_NAME, SpanKind, set_span_kind
 
 _MAX_ATTR_CHARS = 8192
 
@@ -54,6 +54,7 @@ def observe(
     name: str | None = ...,
     capture_input: bool = ...,
     capture_output: bool = ...,
+    kind: SpanKind = ...,
 ) -> Callable[[F], F]: ...
 
 
@@ -63,6 +64,7 @@ def observe(
     name: str | None = None,
     capture_input: bool = True,
     capture_output: bool = True,
+    kind: SpanKind = SpanKind.CHAIN,
 ) -> Any:
     """Decorate a function so each call is traced as a span.
 
@@ -74,11 +76,11 @@ def observe(
 
         def _set_input(span: trace.Span, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
             if capture_input:
-                span.set_attribute(INPUT_ATTR, _serialize_inputs(args, kwargs))
+                span.set_attribute(INPUT_VALUE, _serialize_inputs(args, kwargs))
 
         def _set_output(span: trace.Span, result: Any) -> None:
             if capture_output:
-                span.set_attribute(OUTPUT_ATTR, _serialize(result))
+                span.set_attribute(OUTPUT_VALUE, _serialize(result))
 
         if inspect.isasyncgenfunction(fn):
 
@@ -86,6 +88,7 @@ def observe(
             async def async_gen_wrapper(*args: Any, **kwargs: Any) -> Any:
                 tracer = trace.get_tracer(TRACER_NAME, __version__)
                 with tracer.start_as_current_span(span_name) as span:
+                    set_span_kind(span, kind)
                     _set_input(span, args, kwargs)
                     try:
                         async for item in fn(*args, **kwargs):
@@ -102,6 +105,7 @@ def observe(
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 tracer = trace.get_tracer(TRACER_NAME, __version__)
                 with tracer.start_as_current_span(span_name) as span:
+                    set_span_kind(span, kind)
                     _set_input(span, args, kwargs)
                     try:
                         result = await fn(*args, **kwargs)
@@ -119,6 +123,7 @@ def observe(
             def gen_wrapper(*args: Any, **kwargs: Any) -> Any:
                 tracer = trace.get_tracer(TRACER_NAME, __version__)
                 with tracer.start_as_current_span(span_name) as span:
+                    set_span_kind(span, kind)
                     _set_input(span, args, kwargs)
                     try:
                         yield from fn(*args, **kwargs)
@@ -132,6 +137,7 @@ def observe(
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = trace.get_tracer(TRACER_NAME, __version__)
             with tracer.start_as_current_span(span_name) as span:
+                set_span_kind(span, kind)
                 _set_input(span, args, kwargs)
                 try:
                     result = fn(*args, **kwargs)
