@@ -11,7 +11,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 from . import __version__
 from .config import GlassflowConfig, resolve_config
 
-DEFAULT_TRACER_NAME = "glassflow_sdk"
+DEFAULT_TRACER_NAME = "glassflow"
 
 
 def build_span_exporter(config: GlassflowConfig) -> SpanExporter:
@@ -71,7 +71,7 @@ def init(
     resource = Resource.create(
         {
             "service.name": config.service_name,
-            "telemetry.sdk.name": "glassflow-sdk",
+            "telemetry.sdk.name": "glassflow-ai",
             "telemetry.sdk.version": __version__,
             "telemetry.sdk.language": "python",
         }

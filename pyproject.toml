@@ -1,5 +1,5 @@
 [project]
-name = "glassflow-sdk"
+name = "glassflow-ai"
 dynamic = ["version"]
 description = "GlassFlow SDK — OpenTelemetry-native tracing for AI agents and LLM applications."
 readme = "README.md"
@@ -35,19 +35,19 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/glassflow/glassflow-sdk-python"
-Repository = "https://github.com/glassflow/glassflow-sdk-python.git"
-Issues = "https://github.com/glassflow/glassflow-sdk-python/issues"
+Homepage = "https://github.com/glassflow/glassflow-python"
+Repository = "https://github.com/glassflow/glassflow-python.git"
+Issues = "https://github.com/glassflow/glassflow-python/issues"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "src/glassflow_sdk/__init__.py"
+path = "src/glassflow/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/glassflow_sdk"]
+packages = ["src/glassflow"]
 
 [dependency-groups]
 dev = [
