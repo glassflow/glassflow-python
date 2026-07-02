@@ -3,9 +3,9 @@
   "packages": {
     ".": {
       "release-type": "python",
-      "package-name": "glassflow-sdk",
+      "package-name": "glassflow-ai",
       "include-component-in-tag": false,
-      "extra-files": ["src/glassflow_sdk/__init__.py"]
+      "extra-files": ["src/glassflow/__init__.py"]
     }
   }
 }

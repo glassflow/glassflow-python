@@ -1,6 +1,6 @@
 # GlassFlow Instrumentation SDK (Python)
 
-OpenTelemetry-native tracing for AI agents and LLM applications. `glassflow-sdk`
+OpenTelemetry-native tracing for AI agents and LLM applications. `glassflow-ai`
 emits [OpenTelemetry GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 traces over OTLP to the managed GlassFlow observability platform (or any
 OTLP-compatible backend).
@@ -10,20 +10,20 @@ OTLP-compatible backend).
 ## Install
 
 ```bash
-pip install glassflow-sdk
+pip install glassflow-ai
 ```
 
 ## Quickstart
 
 ```python
-import glassflow_sdk
+import glassflow
 
-glassflow_sdk.init(
+glassflow.init(
     api_key="glassflow_...",          # or set GLASSFLOW_API_KEY
     service_name="my-agent",          # or set GLASSFLOW_SERVICE_NAME
 )
 
-tracer = glassflow_sdk.get_tracer()
+tracer = glassflow.get_tracer()
 with tracer.start_as_current_span("my-operation"):
     ...
 ```

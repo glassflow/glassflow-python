@@ -285,7 +285,7 @@ wheels = [
 ]
 
 [[package]]
-name = "glassflow-sdk"
+name = "glassflow-ai"
 source = { editable = "." }
 dependencies = [
     { name = "opentelemetry-api" },

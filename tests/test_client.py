@@ -2,9 +2,9 @@ from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from glassflow_sdk import init
-from glassflow_sdk.client import GlassflowClient, build_span_exporter
-from glassflow_sdk.config import resolve_config
+from glassflow import init
+from glassflow.client import GlassflowClient, build_span_exporter
+from glassflow.config import resolve_config
 
 
 def _memory_client(**kwargs: object) -> tuple[GlassflowClient, InMemorySpanExporter]:

@@ -1,6 +1,6 @@
 import pytest
 
-from glassflow_sdk.config import DEFAULT_ENDPOINT, GlassflowConfig, resolve_config
+from glassflow.config import DEFAULT_ENDPOINT, GlassflowConfig, resolve_config
 
 ENV_VARS = [
     "GLASSFLOW_ENDPOINT",
