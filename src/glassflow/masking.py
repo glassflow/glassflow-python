@@ -8,6 +8,7 @@ so it's a single client-side choke point for sensitive data.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -15,6 +16,8 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
 from .semconv import CONTENT_ATTRIBUTES
+
+logger = logging.getLogger(__name__)
 
 Mask = Callable[[Any], Any]
 
@@ -56,7 +59,17 @@ class MaskingSpanExporter(SpanExporter):
                 if not self._capture_content:
                     del attributes[key]
                 elif self._mask is not None:
-                    attributes[key] = self._mask(attributes[key])
+                    try:
+                        attributes[key] = self._mask(attributes[key])
+                    except Exception:
+                        # Fail closed: a broken mask must neither leak the
+                        # unmasked value nor take down the whole batch.
+                        del attributes[key]
+                        logger.warning(
+                            "mask callable raised for attribute %r; value dropped",
+                            key,
+                            exc_info=True,
+                        )
         finally:
             if was_immutable:
                 attributes._immutable = True
