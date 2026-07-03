@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
@@ -11,6 +14,7 @@ from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
 from . import __version__
 from .config import GlassflowConfig, resolve_config
+from .masking import MaskingSpanExporter
 from .semconv import TRACER_NAME
 
 
@@ -48,6 +52,8 @@ def init(
     headers: dict[str, str] | None = None,
     disabled: bool | None = None,
     sample_rate: float | None = None,
+    capture_content: bool | None = None,
+    mask: Callable[[Any], Any] | None = None,
     span_exporter: SpanExporter | None = None,
     set_global: bool = True,
 ) -> GlassflowClient:
@@ -60,6 +66,8 @@ def init(
         headers: Extra headers for the OTLP exporter.
         disabled: If True, no exporter is attached (spans are dropped).
         sample_rate: Head sampling ratio 0.0-1.0 (whole-trace). Default 1.0.
+        capture_content: If False, strip prompt/response content at export. Default True.
+        mask: Redact content attribute values at export (applies to all spans).
         span_exporter: Override the default OTLP exporter (useful for testing).
         set_global: Register the provider as the global OpenTelemetry provider.
     """
@@ -70,6 +78,7 @@ def init(
         headers=headers,
         disabled=disabled,
         sample_rate=sample_rate,
+        capture_content=capture_content,
     )
     resource = Resource.create(
         {
@@ -84,6 +93,10 @@ def init(
 
     if not config.disabled:
         exporter = span_exporter if span_exporter is not None else build_span_exporter(config)
+        if not config.capture_content or mask is not None:
+            exporter = MaskingSpanExporter(
+                exporter, capture_content=config.capture_content, mask=mask
+            )
         provider.add_span_processor(BatchSpanProcessor(exporter))
 
     if set_global:

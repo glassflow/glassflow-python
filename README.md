@@ -53,6 +53,16 @@ variables:
 | `service_name` | `GLASSFLOW_SERVICE_NAME` | `unknown_service`              | Sets the OpenTelemetry `service.name` resource attribute.            |
 | `disabled`     | `GLASSFLOW_DISABLED`     | `false`                        | Kill switch. When true, spans are created but never exported.        |
 | `sample_rate`  | `GLASSFLOW_SAMPLE_RATE`  | `1.0`                          | Head sampling ratio `0.0`–`1.0` (whole-trace; children follow root). |
+| `capture_content` | `GLASSFLOW_CAPTURE_CONTENT` | `true`                    | When false, prompt/response content is stripped at export (metadata still sent). |
+
+`mask` is a code-only option (no env var): pass a callable to `init(mask=...)` and
+it is applied to every content attribute value at export, across our spans and any
+bundled third-party instrumentation.
+
+```python
+glassflow.init(mask=lambda value: "[REDACTED]")   # redact all captured content
+glassflow.init(capture_content=False)             # drop content entirely, keep metadata
+```
 
 ## Development
 

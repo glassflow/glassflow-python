@@ -17,6 +17,7 @@ ENV_API_KEY = "GLASSFLOW_API_KEY"
 ENV_SERVICE_NAME = "GLASSFLOW_SERVICE_NAME"
 ENV_DISABLED = "GLASSFLOW_DISABLED"
 ENV_SAMPLE_RATE = "GLASSFLOW_SAMPLE_RATE"
+ENV_CAPTURE_CONTENT = "GLASSFLOW_CAPTURE_CONTENT"
 
 _TRUENESS = frozenset({"1", "true", "yes", "on"})
 
@@ -48,6 +49,7 @@ class GlassflowConfig:
     headers: dict[str, str] = field(default_factory=dict)
     disabled: bool = False
     sample_rate: float = 1.0
+    capture_content: bool = True
 
     @property
     def traces_endpoint(self) -> str:
@@ -63,6 +65,7 @@ def resolve_config(
     headers: dict[str, str] | None = None,
     disabled: bool | None = None,
     sample_rate: float | None = None,
+    capture_content: bool | None = None,
 ) -> GlassflowConfig:
     """Resolve SDK configuration from arguments, environment, then defaults."""
     resolved_endpoint = endpoint or os.getenv(ENV_ENDPOINT) or DEFAULT_ENDPOINT
@@ -71,6 +74,9 @@ def resolve_config(
     resolved_disabled = _env_bool(ENV_DISABLED, default=False) if disabled is None else disabled
     resolved_sample_rate = (
         _env_float(ENV_SAMPLE_RATE, default=1.0) if sample_rate is None else sample_rate
+    )
+    resolved_capture_content = (
+        _env_bool(ENV_CAPTURE_CONTENT, default=True) if capture_content is None else capture_content
     )
 
     resolved_headers = dict(headers or {})
@@ -85,4 +91,5 @@ def resolve_config(
         headers=resolved_headers,
         disabled=resolved_disabled,
         sample_rate=resolved_sample_rate,
+        capture_content=resolved_capture_content,
     )

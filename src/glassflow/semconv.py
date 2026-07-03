@@ -32,6 +32,23 @@ GEN_AI_OUTPUT_MESSAGES = "gen_ai.output.messages"
 GEN_AI_RESPONSE_FINISH_REASONS = "gen_ai.response.finish_reasons"
 GEN_AI_REQUEST_PREFIX = "gen_ai.request."
 
+# Attribute keys carrying user content — masked/stripped at export (see masking.py).
+CONTENT_ATTRIBUTES = frozenset(
+    {
+        INPUT_VALUE,
+        OUTPUT_VALUE,
+        GEN_AI_INPUT_MESSAGES,
+        GEN_AI_OUTPUT_MESSAGES,
+        # common third-party content keys (bundled instrumentation)
+        "gen_ai.prompt",
+        "gen_ai.completion",
+        "llm.input_messages",
+        "llm.output_messages",
+        "mlflow.spanInputs",
+        "mlflow.spanOutputs",
+    }
+)
+
 
 class SpanKind(str, Enum):
     """Observation kind. Values are OpenInference `openinference.span.kind` values."""
