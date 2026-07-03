@@ -29,6 +29,14 @@ def test_cm_model_and_input(exported_spans: InMemorySpanExporter) -> None:
     assert "hi" in attrs["gen_ai.input.messages"]
 
 
+def test_cm_provider(exported_spans: InMemorySpanExporter) -> None:
+    with start_as_current_generation("chat", provider="openai"):
+        pass
+    attrs = exported_spans.get_finished_spans()[0].attributes
+    assert attrs["gen_ai.provider.name"] == "openai"
+    assert "gen_ai.system" not in attrs  # legacy key must not be emitted
+
+
 def test_cm_output_and_usage(exported_spans: InMemorySpanExporter) -> None:
     with start_as_current_generation("chat", model="gpt-4o") as gen:
         gen.set_output([{"role": "assistant", "content": "hello"}])

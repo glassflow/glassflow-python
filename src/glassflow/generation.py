@@ -20,11 +20,11 @@ from . import __version__
 from .semconv import (
     GEN_AI_INPUT_MESSAGES,
     GEN_AI_OUTPUT_MESSAGES,
+    GEN_AI_PROVIDER_NAME,
     GEN_AI_REQUEST_MODEL,
     GEN_AI_REQUEST_PREFIX,
     GEN_AI_RESPONSE_FINISH_REASONS,
     GEN_AI_RESPONSE_MODEL,
-    GEN_AI_SYSTEM,
     GEN_AI_USAGE_INPUT_TOKENS,
     GEN_AI_USAGE_OUTPUT_TOKENS,
     TRACER_NAME,
@@ -81,7 +81,7 @@ def _configure(
     generation: Generation,
     *,
     model: str | None,
-    system: str | None,
+    provider: str | None,
     input: Messages | None,
     model_parameters: dict[str, Any] | None,
 ) -> None:
@@ -89,8 +89,8 @@ def _configure(
     set_span_kind(span, SpanKind.LLM)
     if model is not None:
         span.set_attribute(GEN_AI_REQUEST_MODEL, model)
-    if system is not None:
-        span.set_attribute(GEN_AI_SYSTEM, system)
+    if provider is not None:
+        span.set_attribute(GEN_AI_PROVIDER_NAME, provider)
     for key, value in (model_parameters or {}).items():
         span.set_attribute(f"{GEN_AI_REQUEST_PREFIX}{key}", value)
     if input is not None:
@@ -101,7 +101,7 @@ def start_generation(
     name: str,
     *,
     model: str | None = None,
-    system: str | None = None,
+    provider: str | None = None,
     input: Messages | None = None,
     model_parameters: dict[str, Any] | None = None,
 ) -> Generation:
@@ -113,7 +113,7 @@ def start_generation(
     span = trace.get_tracer(TRACER_NAME, __version__).start_span(name)
     generation = Generation(span)
     _configure(
-        generation, model=model, system=system, input=input, model_parameters=model_parameters
+        generation, model=model, provider=provider, input=input, model_parameters=model_parameters
     )
     return generation
 
@@ -123,7 +123,7 @@ def start_as_current_generation(
     name: str,
     *,
     model: str | None = None,
-    system: str | None = None,
+    provider: str | None = None,
     input: Messages | None = None,
     model_parameters: dict[str, Any] | None = None,
 ) -> Iterator[Generation]:
@@ -132,6 +132,10 @@ def start_as_current_generation(
     with tracer.start_as_current_span(name) as span:
         generation = Generation(span)
         _configure(
-            generation, model=model, system=system, input=input, model_parameters=model_parameters
+            generation,
+            model=model,
+            provider=provider,
+            input=input,
+            model_parameters=model_parameters,
         )
         yield generation
