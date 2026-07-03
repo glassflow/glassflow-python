@@ -57,3 +57,22 @@ def test_set_global_false_leaves_global_untouched() -> None:
     client, _ = _memory_client()
     assert trace.get_tracer_provider() is before
     assert client._provider is not before
+
+
+def test_sampling_drops_all_at_zero() -> None:
+    exporter = InMemorySpanExporter()
+    client = init(span_exporter=exporter, set_global=False, sample_rate=0.0)
+    for i in range(20):
+        with client.get_tracer().start_as_current_span(f"op{i}"):
+            pass
+    client.flush()
+    assert exporter.get_finished_spans() == ()
+
+
+def test_sampling_keeps_all_at_one() -> None:
+    exporter = InMemorySpanExporter()
+    client = init(span_exporter=exporter, set_global=False, sample_rate=1.0)
+    with client.get_tracer().start_as_current_span("op"):
+        pass
+    client.flush()
+    assert len(exporter.get_finished_spans()) == 1

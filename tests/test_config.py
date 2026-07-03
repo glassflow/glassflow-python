@@ -7,6 +7,7 @@ ENV_VARS = [
     "GLASSFLOW_API_KEY",
     "GLASSFLOW_SERVICE_NAME",
     "GLASSFLOW_DISABLED",
+    "GLASSFLOW_SAMPLE_RATE",
 ]
 
 
@@ -14,6 +15,19 @@ ENV_VARS = [
 def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in ENV_VARS:
         monkeypatch.delenv(var, raising=False)
+
+
+def test_sample_rate_default_is_one() -> None:
+    assert resolve_config().sample_rate == 1.0
+
+
+def test_sample_rate_from_argument() -> None:
+    assert resolve_config(sample_rate=0.25).sample_rate == 0.25
+
+
+def test_sample_rate_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GLASSFLOW_SAMPLE_RATE", "0.5")
+    assert resolve_config().sample_rate == 0.5
 
 
 def test_explicit_arguments_win() -> None:

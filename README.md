@@ -52,6 +52,7 @@ variables:
 | `api_key`      | `GLASSFLOW_API_KEY`      | —                              | Injected as an `Authorization: Bearer <key>` header on every export. |
 | `service_name` | `GLASSFLOW_SERVICE_NAME` | `unknown_service`              | Sets the OpenTelemetry `service.name` resource attribute.            |
 | `disabled`     | `GLASSFLOW_DISABLED`     | `false`                        | Kill switch. When true, spans are created but never exported.        |
+| `sample_rate`  | `GLASSFLOW_SAMPLE_RATE`  | `1.0`                          | Head sampling ratio `0.0`–`1.0` (whole-trace; children follow root). |
 
 ## Development
 
