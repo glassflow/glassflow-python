@@ -22,7 +22,7 @@ OUTPUT_VALUE = "output.value"
 
 # OTel GenAI (subset we emit)
 GEN_AI_OPERATION_NAME = "gen_ai.operation.name"
-GEN_AI_SYSTEM = "gen_ai.system"
+GEN_AI_PROVIDER_NAME = "gen_ai.provider.name"
 GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
 GEN_AI_RESPONSE_MODEL = "gen_ai.response.model"
 GEN_AI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens"
