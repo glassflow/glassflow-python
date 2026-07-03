@@ -64,6 +64,28 @@ glassflow.init(mask=lambda value: "[REDACTED]")   # redact all captured content
 glassflow.init(capture_content=False)             # drop content entirely, keep metadata
 ```
 
+## Reliability
+
+Export is designed to never block or crash your application:
+
+- **Async batched export.** Spans are queued in-process and exported in batches
+  from a background thread (`BatchSpanProcessor`). Span creation stays fast even
+  when the backend is slow or unreachable.
+- **Retries.** Transient failures (connection errors, 429/5xx) are retried with
+  exponential backoff and jitter, bounded by the export timeout.
+- **Graceful degradation.** If the backend stays down, spans are dropped and an
+  error is logged — exceptions never propagate into application code. A failing
+  `mask` callable drops only the affected attribute value (fail closed), never
+  the batch.
+- **Flush on shutdown.** Pending spans are flushed automatically at interpreter
+  exit. Call `client.flush()` to force an export, or `client.shutdown()` to
+  drain and stop.
+
+Batching and backpressure are tunable via the standard OpenTelemetry env vars:
+`OTEL_BSP_MAX_QUEUE_SIZE` (default 2048; spans beyond this are dropped),
+`OTEL_BSP_SCHEDULE_DELAY` (default 5000 ms), `OTEL_BSP_MAX_EXPORT_BATCH_SIZE`
+(default 512), and `OTEL_BSP_EXPORT_TIMEOUT` (default 30000 ms).
+
 ## Development
 
 ```bash

@@ -71,6 +71,9 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+markers = [
+    "integration: exercises a real OTLP export over a local HTTP server (slower)",
+]
 
 [tool.mypy]
 python_version = "3.10"
