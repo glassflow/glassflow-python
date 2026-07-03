@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/glassflow/glassflow-python/compare/v0.1.0...v0.2.0) (2026-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* start_generation/start_as_current_generation param 'system' is now 'provider', and the emitted attribute is gen_ai.provider.name (was gen_ai.system). GLA2-73.
+
+### Features
+
+* add PII masking and content opt-out at export (GLA2-23) ([2c3b4b0](https://github.com/glassflow/glassflow-python/commit/2c3b4b054bb78e2bc1757e55b944ee8e636aa418))
+* emit gen_ai.provider.name; rename generation param system -&gt; provider ([f30ea71](https://github.com/glassflow/glassflow-python/commit/f30ea71674fe4d2797e9ab5d5842e393b40054c0))
+* harden export pipeline reliability (GLA2-25) ([e1f2f16](https://github.com/glassflow/glassflow-python/commit/e1f2f16bdf9b7d6f058b89d9e66ff421c1647c3e))
+* harden export pipeline reliability (GLA2-25) ([0934973](https://github.com/glassflow/glassflow-python/commit/093497379eaed0ae0b0d56c9653efc1f37438ed1))
+* head-based sampling (GLA2-24) ([5b89796](https://github.com/glassflow/glassflow-python/commit/5b89796b3ff4bf0f099e4c615b407db7c8b9fca4))
+* head-based sampling via sample_rate ([67d4fd1](https://github.com/glassflow/glassflow-python/commit/67d4fd1ea00950645866e391f3c38c6dcbf9cb8b))
+* PII masking and content opt-out at export (GLA2-23) ([dad754e](https://github.com/glassflow/glassflow-python/commit/dad754e526a918bb54e3cff896b0b54ee5d7d7f6))
+
 ## [0.1.0](https://github.com/glassflow/glassflow-python/compare/v0.0.1...v0.1.0) (2026-07-02)
 
 
