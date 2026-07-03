@@ -7,6 +7,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
 from . import __version__
 from .config import GlassflowConfig, resolve_config
@@ -46,6 +47,7 @@ def init(
     service_name: str | None = None,
     headers: dict[str, str] | None = None,
     disabled: bool | None = None,
+    sample_rate: float | None = None,
     span_exporter: SpanExporter | None = None,
     set_global: bool = True,
 ) -> GlassflowClient:
@@ -57,6 +59,7 @@ def init(
         service_name: Value for the ``service.name`` resource attribute.
         headers: Extra headers for the OTLP exporter.
         disabled: If True, no exporter is attached (spans are dropped).
+        sample_rate: Head sampling ratio 0.0-1.0 (whole-trace). Default 1.0.
         span_exporter: Override the default OTLP exporter (useful for testing).
         set_global: Register the provider as the global OpenTelemetry provider.
     """
@@ -66,6 +69,7 @@ def init(
         service_name=service_name,
         headers=headers,
         disabled=disabled,
+        sample_rate=sample_rate,
     )
     resource = Resource.create(
         {
@@ -75,7 +79,8 @@ def init(
             "telemetry.sdk.language": "python",
         }
     )
-    provider = TracerProvider(resource=resource)
+    sampler = ParentBased(root=TraceIdRatioBased(config.sample_rate))
+    provider = TracerProvider(resource=resource, sampler=sampler)
 
     if not config.disabled:
         exporter = span_exporter if span_exporter is not None else build_span_exporter(config)
