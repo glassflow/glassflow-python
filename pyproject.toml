@@ -34,6 +34,21 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.24.0",
 ]
 
+[project.optional-dependencies]
+# Auto-instrumentation extras — one per entry in glassflow.instrumentation.REGISTRY.
+openai = ["openinference-instrumentation-openai"]
+anthropic = ["openinference-instrumentation-anthropic"]
+langchain = ["openinference-instrumentation-langchain"]
+llama-index = ["openinference-instrumentation-llama-index"]
+litellm = ["openinference-instrumentation-litellm"]
+instruments = [
+    "openinference-instrumentation-openai",
+    "openinference-instrumentation-anthropic",
+    "openinference-instrumentation-langchain",
+    "openinference-instrumentation-llama-index",
+    "openinference-instrumentation-litellm",
+]
+
 [project.urls]
 Homepage = "https://github.com/glassflow/glassflow-python"
 Repository = "https://github.com/glassflow/glassflow-python.git"
@@ -55,6 +70,9 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.6.0",
     "mypy>=1.11.0",
+    # integration tests for bundled auto-instrumentation
+    "openai>=1.0.0",
+    "openinference-instrumentation-openai",
 ]
 
 [tool.ruff]
