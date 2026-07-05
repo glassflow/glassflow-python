@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -13,22 +17,38 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --group dev
+      - run: uv sync --locked --group dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
+      - run: uv build
 
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --group dev
+      - run: uv sync --locked --group dev
       - run: uv run pytest
+
+  # Every instrumentation.REGISTRY entry must resolve against its real package —
+  # enable_instrumentations() swallows ImportError, so a typo'd module/class name
+  # would otherwise ship silently.
+  extras-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked --group dev --all-extras
+      - run: uv run pytest tests/test_instrumentation_registry.py
+        env:
+          GLASSFLOW_ALL_EXTRAS: "1"
