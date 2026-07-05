@@ -1,13 +1,22 @@
-"""Export-stage PII controls: content opt-out + a redaction mask (GLA2-23).
+"""Export-stage PII controls: content opt-out + a redaction mask (GLA2-23/83).
 
 A ``SpanExporter`` wrapper that, before spans leave the process, either strips
 content attributes (``capture_content=False``) or applies a caller-supplied
 ``mask``. It runs on every span it sees — including third-party instrumentation —
 so it's a single client-side choke point for sensitive data.
+
+Sanitization works on **copies**: a ``ReadableSpan`` shares its attribute dict
+by reference with every processor on the provider, so mutating it in place
+would rewrite what other exporters see (and race with their iteration).
+
+Fail-closed guarantees: a mask that raises, returns ``None``, or returns a
+value OTel can't encode never leaks the original — the attribute is dropped
+(or the return value serialized), and the rest of the batch is delivered.
 """
 
 from __future__ import annotations
 
+import copy
 import logging
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -15,11 +24,26 @@ from typing import Any
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
-from .semconv import CONTENT_ATTRIBUTE_PREFIXES, CONTENT_ATTRIBUTES
+from ._serde import serialize
+from .semconv import (
+    CONTENT_ATTRIBUTE_PREFIXES,
+    CONTENT_ATTRIBUTE_SUFFIXES,
+    CONTENT_ATTRIBUTES,
+)
 
 logger = logging.getLogger(__name__)
 
 Mask = Callable[[Any], Any]
+
+_PRIMITIVES = (str, bool, int, float, bytes)
+
+
+def _is_content_key(key: str) -> bool:
+    return (
+        key in CONTENT_ATTRIBUTES
+        or key.startswith(CONTENT_ATTRIBUTE_PREFIXES)
+        or key.endswith(CONTENT_ATTRIBUTE_SUFFIXES)
+    )
 
 
 class MaskingSpanExporter(SpanExporter):
@@ -38,45 +62,56 @@ class MaskingSpanExporter(SpanExporter):
 
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         if not self._capture_content or self._mask is not None:
-            for span in spans:
-                self._apply(span)
+            spans = [self._sanitized(span) for span in spans]
         return self._inner.export(spans)
 
-    def _apply(self, span: ReadableSpan) -> None:
-        attributes: Any = getattr(span, "_attributes", None)
-        if attributes is None:
-            return
-        keys = [
-            key
-            for key in attributes
-            if key in CONTENT_ATTRIBUTES or key.startswith(CONTENT_ATTRIBUTE_PREFIXES)
-        ]
+    def _sanitized(self, span: ReadableSpan) -> ReadableSpan:
+        attributes = span.attributes
+        if not attributes:
+            return span
+        keys = [key for key in attributes if _is_content_key(key)]
         if not keys:
-            return
-        # A span's attributes are frozen once it ends; lift the guard to edit
-        # in place (this keeps the SDK's value-cleaning path), then restore it.
-        was_immutable = getattr(attributes, "_immutable", False)
-        if was_immutable:
-            attributes._immutable = False
+            return span
+
+        new_attributes = dict(attributes)
+        for key in keys:
+            if not self._capture_content:
+                del new_attributes[key]
+                continue
+            assert self._mask is not None  # guarded in export()
+            try:
+                masked = self._safe_value(self._mask(new_attributes[key]))
+            except Exception:
+                # Fail closed: a broken mask must neither leak the unmasked
+                # value nor take down the whole batch.
+                masked = None
+                logger.warning(
+                    "mask callable raised for attribute %r; value dropped",
+                    key,
+                    exc_info=True,
+                )
+            if masked is None:
+                del new_attributes[key]
+            else:
+                new_attributes[key] = masked
+
+        sanitized = copy.copy(span)
+        sanitized._attributes = new_attributes
+        return sanitized
+
+    @staticmethod
+    def _safe_value(value: Any) -> Any:
+        """Coerce a mask's return into something OTel can encode, or None to drop.
+
+        BoundedAttributes-style cleaning silently refuses invalid values, which
+        would leave the ORIGINAL in place — so we validate ourselves.
+        """
+        if value is None or isinstance(value, _PRIMITIVES):
+            return value
         try:
-            for key in keys:
-                if not self._capture_content:
-                    del attributes[key]
-                elif self._mask is not None:
-                    try:
-                        attributes[key] = self._mask(attributes[key])
-                    except Exception:
-                        # Fail closed: a broken mask must neither leak the
-                        # unmasked value nor take down the whole batch.
-                        del attributes[key]
-                        logger.warning(
-                            "mask callable raised for attribute %r; value dropped",
-                            key,
-                            exc_info=True,
-                        )
-        finally:
-            if was_immutable:
-                attributes._immutable = True
+            return serialize(value)
+        except Exception:
+            return None
 
     def force_flush(self, timeout_millis: int = 30_000) -> bool:
         return self._inner.force_flush(timeout_millis)

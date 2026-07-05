@@ -46,6 +46,9 @@ CONTENT_ATTRIBUTES = frozenset(
         "llm.output_messages",
         "mlflow.spanInputs",
         "mlflow.spanOutputs",
+        # OpenLLMetry workflow/task spans carry full I/O here
+        "traceloop.entity.input",
+        "traceloop.entity.output",
     }
 )
 
@@ -57,6 +60,14 @@ CONTENT_ATTRIBUTE_PREFIXES = (
     "gen_ai.prompt.",
     "gen_ai.completion.",
     "llm.prompts.",
+    "llm.prompt_template.",
+)
+
+# Indexed families where only the content leaf is sensitive (siblings like
+# `.document.id` / `.document.score` are metadata) — matched by suffix.
+CONTENT_ATTRIBUTE_SUFFIXES = (
+    ".document.content",
+    ".embedding.text",
 )
 
 
