@@ -31,6 +31,16 @@ def test_sample_rate_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resolve_config().sample_rate == 0.5
 
 
+def test_sample_rate_out_of_range_is_clamped() -> None:
+    assert resolve_config(sample_rate=1.5).sample_rate == 1.0
+    assert resolve_config(sample_rate=-0.2).sample_rate == 0.0
+
+
+def test_sample_rate_out_of_range_env_is_clamped(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GLASSFLOW_SAMPLE_RATE", "50")
+    assert resolve_config().sample_rate == 1.0
+
+
 def test_capture_content_default_is_true() -> None:
     assert resolve_config().capture_content is True
 

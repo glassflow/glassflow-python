@@ -43,7 +43,7 @@ def test_cm_output_and_usage(exported_spans: InMemorySpanExporter) -> None:
     with start_as_current_generation("chat", model="gpt-4o") as gen:
         gen.set_output([{"role": "assistant", "content": "hello"}])
         gen.set_usage(input_tokens=10, output_tokens=5)
-        gen.set_model(response_model="gpt-4o-2026-05")
+        gen.set_response_model("gpt-4o-2026-05")
     attrs = exported_spans.get_finished_spans()[0].attributes
     assert "hello" in attrs["gen_ai.output.messages"]
     assert attrs["gen_ai.usage.input_tokens"] == 10
@@ -51,11 +51,33 @@ def test_cm_output_and_usage(exported_spans: InMemorySpanExporter) -> None:
     assert attrs["gen_ai.response.model"] == "gpt-4o-2026-05"
 
 
-def test_cm_finish_reason(exported_spans: InMemorySpanExporter) -> None:
+def test_cm_finish_reasons_list(exported_spans: InMemorySpanExporter) -> None:
     with start_as_current_generation("chat") as gen:
-        gen.set_finish_reason(["stop"])
+        gen.set_finish_reasons(["stop", "length"])
+    attrs = exported_spans.get_finished_spans()[0].attributes
+    assert attrs["gen_ai.response.finish_reasons"] == ("stop", "length")
+
+
+def test_cm_finish_reasons_single_string(exported_spans: InMemorySpanExporter) -> None:
+    with start_as_current_generation("chat") as gen:
+        gen.set_finish_reasons("stop")
     attrs = exported_spans.get_finished_spans()[0].attributes
     assert attrs["gen_ai.response.finish_reasons"] == ("stop",)
+
+
+def test_cm_operation_override(exported_spans: InMemorySpanExporter) -> None:
+    with start_as_current_generation("completion", operation="text_completion"):
+        pass
+    attrs = exported_spans.get_finished_spans()[0].attributes
+    assert attrs["gen_ai.operation.name"] == "text_completion"
+    assert attrs["openinference.span.kind"] == "LLM"
+
+
+def test_manual_operation_override(exported_spans: InMemorySpanExporter) -> None:
+    gen = start_generation("completion", operation="text_completion")
+    gen.end()
+    attrs = exported_spans.get_finished_spans()[0].attributes
+    assert attrs["gen_ai.operation.name"] == "text_completion"
 
 
 def test_cm_model_parameters(exported_spans: InMemorySpanExporter) -> None:

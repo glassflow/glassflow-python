@@ -36,6 +36,21 @@ def test_resource_has_service_name() -> None:
     assert exporter.get_finished_spans()[0].resource.attributes["service.name"] == "test-svc"
 
 
+def test_resource_uses_distro_not_sdk_identity() -> None:
+    # Spec: telemetry.sdk.name MUST be "opentelemetry"; distributions identify
+    # themselves via telemetry.distro.*.
+    from glassflow import __version__
+
+    client, exporter = _memory_client()
+    with client.get_tracer().start_as_current_span("op"):
+        pass
+    client.flush()
+    resource_attrs = exporter.get_finished_spans()[0].resource.attributes
+    assert resource_attrs["telemetry.sdk.name"] == "opentelemetry"
+    assert resource_attrs["telemetry.distro.name"] == "glassflow-ai"
+    assert resource_attrs["telemetry.distro.version"] == __version__
+
+
 def test_disabled_does_not_export() -> None:
     exporter = InMemorySpanExporter()
     client = init(span_exporter=exporter, set_global=False, disabled=True)

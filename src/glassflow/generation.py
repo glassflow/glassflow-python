@@ -19,6 +19,7 @@ from . import __version__
 from ._serde import serialize
 from .semconv import (
     GEN_AI_INPUT_MESSAGES,
+    GEN_AI_OPERATION_NAME,
     GEN_AI_OUTPUT_MESSAGES,
     GEN_AI_PROVIDER_NAME,
     GEN_AI_REQUEST_MODEL,
@@ -118,7 +119,7 @@ class Generation:
     def set_output(self, messages: Messages) -> None:
         self._span.set_attribute(GEN_AI_OUTPUT_MESSAGES, _serialize_messages(messages, "assistant"))
 
-    def set_model(self, response_model: str) -> None:
+    def set_response_model(self, response_model: str) -> None:
         self._span.set_attribute(GEN_AI_RESPONSE_MODEL, response_model)
 
     def set_usage(
@@ -129,7 +130,9 @@ class Generation:
         if output_tokens is not None:
             self._span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, output_tokens)
 
-    def set_finish_reason(self, reasons: list[str]) -> None:
+    def set_finish_reasons(self, reasons: str | list[str]) -> None:
+        if isinstance(reasons, str):
+            reasons = [reasons]
         self._span.set_attribute(GEN_AI_RESPONSE_FINISH_REASONS, reasons)
 
     def update(self, *, input: Messages | None = None, output: Messages | None = None) -> None:
@@ -149,9 +152,12 @@ def _configure(
     provider: str | None,
     input: Messages | None,
     model_parameters: dict[str, Any] | None,
+    operation: str,
 ) -> None:
     span = generation._span
     set_span_kind(span, SpanKind.LLM)
+    if operation != "chat":  # set_span_kind already stamped the default
+        span.set_attribute(GEN_AI_OPERATION_NAME, operation)
     if model is not None:
         span.set_attribute(GEN_AI_REQUEST_MODEL, model)
     if provider is not None:
@@ -169,6 +175,7 @@ def start_generation(
     provider: str | None = None,
     input: Messages | None = None,
     model_parameters: dict[str, Any] | None = None,
+    operation: str = "chat",
 ) -> Generation:
     """Create an LLM-kind span and return a ``Generation``. You MUST call ``.end()``.
 
@@ -178,7 +185,12 @@ def start_generation(
     span = trace.get_tracer(TRACER_NAME, __version__).start_span(name)
     generation = Generation(span)
     _configure(
-        generation, model=model, provider=provider, input=input, model_parameters=model_parameters
+        generation,
+        model=model,
+        provider=provider,
+        input=input,
+        model_parameters=model_parameters,
+        operation=operation,
     )
     return generation
 
@@ -191,6 +203,7 @@ def start_as_current_generation(
     provider: str | None = None,
     input: Messages | None = None,
     model_parameters: dict[str, Any] | None = None,
+    operation: str = "chat",
 ) -> Iterator[Generation]:
     """Open an LLM-kind span as the current span and yield a ``Generation``; auto-ends."""
     tracer = trace.get_tracer(TRACER_NAME, __version__)
@@ -202,5 +215,6 @@ def start_as_current_generation(
             provider=provider,
             input=input,
             model_parameters=model_parameters,
+            operation=operation,
         )
         yield generation

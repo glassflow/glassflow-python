@@ -121,6 +121,22 @@ def test_capture_content_false_covers_retriever_embedding_and_traceloop_keys() -
     assert attrs["retrieval.documents.0.document.id"] == "doc-1"
 
 
+def test_mask_accepting_key_receives_attribute_key() -> None:
+    seen: list[str] = []
+
+    def keyed_mask(value: object, *, key: str) -> str:
+        seen.append(key)
+        return "***"
+
+    inner = InMemorySpanExporter()
+    client = init(span_exporter=inner, set_global=False, mask=keyed_mask)
+    with client.get_tracer().start_as_current_span("op") as span:
+        span.set_attribute("input.value", "secret")
+    client.flush()
+    assert inner.get_finished_spans()[0].attributes["input.value"] == "***"
+    assert seen == ["input.value"]
+
+
 def test_no_masking_by_default() -> None:
     inner = InMemorySpanExporter()
     client = init(span_exporter=inner, set_global=False)
