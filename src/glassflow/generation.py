@@ -8,7 +8,6 @@ spans are therefore readable by any gen_ai-compatible consumer.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -17,6 +16,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Span
 
 from . import __version__
+from ._serde import serialize
 from .semconv import (
     GEN_AI_INPUT_MESSAGES,
     GEN_AI_OUTPUT_MESSAGES,
@@ -35,10 +35,75 @@ from .semconv import (
 Messages = str | list[Any]
 
 
-def _serialize_messages(messages: Messages) -> str:
+def _normalize_part(item: Any) -> dict[str, Any]:
+    """Convert one content-list entry into a spec message part."""
+    if isinstance(item, dict):
+        # OpenAI multimodal text part {"type": "text", "text": ...}
+        if item.get("type") == "text" and "text" in item:
+            return {"type": "text", "content": item["text"]}
+        if "type" in item:
+            return item  # already-typed part: pass through
+    return {"type": "text", "content": item if isinstance(item, str) else serialize(item)}
+
+
+def _normalize_message(message: Any, default_role: str) -> dict[str, Any]:
+    """Convert one message into the spec ``{"role", "parts": [...]}`` shape.
+
+    Accepts spec-conformant messages (passed through), OpenAI-style
+    ``{"role", "content"}`` / ``tool_calls`` / tool-response messages, and
+    falls back to a serialized text part for anything else.
+    """
+    if isinstance(message, str):
+        return {"role": default_role, "parts": [{"type": "text", "content": message}]}
+    if not isinstance(message, dict):
+        return {"role": default_role, "parts": [{"type": "text", "content": serialize(message)}]}
+    if "parts" in message:
+        normalized = dict(message)
+        normalized.setdefault("role", default_role)
+        return normalized
+
+    role = message.get("role", default_role)
+    if role == "tool" and "tool_call_id" in message:
+        return {
+            "role": "tool",
+            "parts": [
+                {
+                    "type": "tool_call_response",
+                    "id": message["tool_call_id"],
+                    "response": message.get("content"),
+                }
+            ],
+        }
+
+    parts: list[dict[str, Any]] = []
+    content = message.get("content")
+    if isinstance(content, str):
+        parts.append({"type": "text", "content": content})
+    elif isinstance(content, list):
+        parts.extend(_normalize_part(item) for item in content)
+    elif content is not None:
+        parts.append({"type": "text", "content": serialize(content)})
+    for call in message.get("tool_calls") or []:
+        if isinstance(call, dict):
+            function = call.get("function") or {}
+            parts.append(
+                {
+                    "type": "tool_call",
+                    "id": call.get("id"),
+                    "name": function.get("name"),
+                    "arguments": function.get("arguments"),
+                }
+            )
+    return {"role": role, "parts": parts}
+
+
+def _serialize_messages(messages: Messages, default_role: str) -> str:
+    """Serialize to the spec message-array shape (JSON string attribute)."""
     if isinstance(messages, str):
-        return messages
-    return json.dumps(messages, default=repr)
+        normalized = [_normalize_message(messages, default_role)]
+    else:
+        normalized = [_normalize_message(message, default_role) for message in messages]
+    return serialize(normalized)
 
 
 class Generation:
@@ -48,10 +113,10 @@ class Generation:
         self._span = span
 
     def set_input(self, messages: Messages) -> None:
-        self._span.set_attribute(GEN_AI_INPUT_MESSAGES, _serialize_messages(messages))
+        self._span.set_attribute(GEN_AI_INPUT_MESSAGES, _serialize_messages(messages, "user"))
 
     def set_output(self, messages: Messages) -> None:
-        self._span.set_attribute(GEN_AI_OUTPUT_MESSAGES, _serialize_messages(messages))
+        self._span.set_attribute(GEN_AI_OUTPUT_MESSAGES, _serialize_messages(messages, "assistant"))
 
     def set_model(self, response_model: str) -> None:
         self._span.set_attribute(GEN_AI_RESPONSE_MODEL, response_model)
