@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.0](https://github.com/glassflow/glassflow-python/compare/v0.2.0...v0.3.0) (2026-07-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* Generation.set_model() is now set_response_model(); Generation.set_finish_reason() is now set_finish_reasons().
+
+### Features
+
+* bundled auto-instrumentation via OpenInference (GLA2-26) ([b77cb4c](https://github.com/glassflow/glassflow-python/commit/b77cb4c83e4b54df507af199de55deb485bef9df))
+* bundled auto-instrumentation via OpenInference (GLA2-26) ([6945ab1](https://github.com/glassflow/glassflow-python/commit/6945ab13bead44f61d765273e23d9ce26513d6e2))
+* pre-1.0 API cleanups from the SDK review ([a294b94](https://github.com/glassflow/glassflow-python/commit/a294b945a01c68da3f918a5e9721b5d67a27433c))
+
+
+### Bug Fixes
+
+* crash-proofing and semconv corrections ([dd06b18](https://github.com/glassflow/glassflow-python/commit/dd06b187b2396e2648dc60b690f4c6c1367b72bb))
+* crash-proofing, semconv corrections, and pre-1.0 API cleanups ([ae3ca7d](https://github.com/glassflow/glassflow-python/commit/ae3ca7da6b2cba2ca0a842e45dca2c0b08625895))
+* define init() lifecycle semantics ([99b644f](https://github.com/glassflow/glassflow-python/commit/99b644f7f7780ede45d365839b732a0bce61728b))
+* define init() lifecycle semantics ([4374298](https://github.com/glassflow/glassflow-python/commit/4374298615b5b08920a2b3bda96f4bdd27d760c9))
+* emit gen_ai.*.messages in the spec role/parts shape (GLA2-84) ([06ba2a2](https://github.com/glassflow/glassflow-python/commit/06ba2a2f0eeb18147c49a59f59497e2e26b68f18))
+* emit gen_ai.*.messages in the spec role/parts shape (GLA2-84) ([a7225d0](https://github.com/glassflow/glassflow-python/commit/a7225d0987c5e63e645b7f5d0f074bb1a42ffd46))
+* harden export-stage masking (GLA2-83) ([db20501](https://github.com/glassflow/glassflow-python/commit/db205012330f4b854588331d34162990ba46a250))
+* harden export-stage masking (GLA2-83) ([9781380](https://github.com/glassflow/glassflow-python/commit/9781380d68936a43b91db45403511d5b2fceeeb7))
+
 ## [0.2.0](https://github.com/glassflow/glassflow-python/compare/v0.1.0...v0.2.0) (2026-07-03)
 
 
