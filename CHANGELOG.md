@@ -44,3 +44,8 @@
 * add start_generation LLM capture helper (gen_ai-native) ([415b168](https://github.com/glassflow/glassflow-python/commit/415b1685403ff2fa6bc4450fe0242e6cd0f5c9a8))
 * add start_span manual span API + Observation handle ([70835f8](https://github.com/glassflow/glassflow-python/commit/70835f890ba2e48de22af99b393a9269d27cec1b))
 * align span API naming + add manual create/update/end lifecycle ([17e8f31](https://github.com/glassflow/glassflow-python/commit/17e8f31e634963f97c53e2be1fed84d434e85b15))
+
+
+### Documentation
+
+* update README title to GlassFlow Python SDK ([33cdacb](https://github.com/glassflow/glassflow-python/commit/33cdacb67b11454c16febfccbc89bdc0593bcd18))
