@@ -1,4 +1,4 @@
-"""Export-stage PII controls: content opt-out + a redaction mask (GLA2-23/83).
+"""Export-stage PII controls: content opt-out + a redaction mask.
 
 A ``SpanExporter`` wrapper that, before spans leave the process, either strips
 content attributes (``capture_content=False``) or applies a caller-supplied
