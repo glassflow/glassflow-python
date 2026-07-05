@@ -17,6 +17,7 @@ value OTel can't encode never leaks the original — the attribute is dropped
 from __future__ import annotations
 
 import copy
+import inspect
 import logging
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -33,9 +34,22 @@ from .semconv import (
 
 logger = logging.getLogger(__name__)
 
-Mask = Callable[[Any], Any]
+Mask = Callable[..., Any]
 
 _PRIMITIVES = (str, bool, int, float, bytes)
+
+
+def _accepts_key(mask: Mask) -> bool:
+    """True if the mask can receive the attribute key as ``key=`` keyword."""
+    try:
+        parameters = inspect.signature(mask).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        p.kind is inspect.Parameter.VAR_KEYWORD
+        or (p.name == "key" and p.kind in (p.KEYWORD_ONLY, p.POSITIONAL_OR_KEYWORD))
+        for p in parameters
+    )
 
 
 def _is_content_key(key: str) -> bool:
@@ -59,6 +73,7 @@ class MaskingSpanExporter(SpanExporter):
         self._inner = inner
         self._capture_content = capture_content
         self._mask = mask
+        self._mask_accepts_key = mask is not None and _accepts_key(mask)
 
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         if not self._capture_content or self._mask is not None:
@@ -80,7 +95,11 @@ class MaskingSpanExporter(SpanExporter):
                 continue
             assert self._mask is not None  # guarded in export()
             try:
-                masked = self._safe_value(self._mask(new_attributes[key]))
+                if self._mask_accepts_key:
+                    raw = self._mask(new_attributes[key], key=key)
+                else:
+                    raw = self._mask(new_attributes[key])
+                masked = self._safe_value(raw)
             except Exception:
                 # Fail closed: a broken mask must neither leak the unmasked
                 # value nor take down the whole batch.

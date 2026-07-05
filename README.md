@@ -57,10 +57,12 @@ variables:
 
 `mask` is a code-only option (no env var): pass a callable to `init(mask=...)` and
 it is applied to every content attribute value at export, across our spans and any
-bundled third-party instrumentation.
+bundled third-party instrumentation. A mask that accepts a `key` keyword also
+receives the attribute key, for per-attribute decisions.
 
 ```python
 glassflow.init(mask=lambda value: "[REDACTED]")   # redact all captured content
+glassflow.init(mask=lambda value, *, key: hash_pii(value) if "input" in key else value)
 glassflow.init(capture_content=False)             # drop content entirely, keep metadata
 ```
 
