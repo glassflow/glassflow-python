@@ -1,4 +1,4 @@
-"""Bundled auto-instrumentation (GLA2-26).
+"""Bundled auto-instrumentation.
 
 `init()` enables any supported third-party instrumentor whose package is
 installed, passing our tracer provider so instrumentation spans nest under
@@ -23,6 +23,7 @@ class FakeInstrumentor:
     """Duck-types BaseInstrumentor: instrument() + is_instrumented flag."""
 
     instrument_calls: list[Any] = []
+    uninstrument_calls: list[Any] = []
 
     def __init__(self) -> None:
         pass
@@ -35,6 +36,10 @@ class FakeInstrumentor:
         type(self).instrument_calls.append(tracer_provider)
         type(self)._instrumented = True
 
+    def uninstrument(self) -> None:
+        type(self).uninstrument_calls.append(None)
+        type(self)._instrumented = False
+
 
 @pytest.fixture()
 def fake_registry(monkeypatch: pytest.MonkeyPatch) -> type[FakeInstrumentor]:
@@ -42,6 +47,7 @@ def fake_registry(monkeypatch: pytest.MonkeyPatch) -> type[FakeInstrumentor]:
 
     class _Instrumentor(FakeInstrumentor):
         instrument_calls: list[Any] = []
+        uninstrument_calls: list[Any] = []
         _instrumented = False
 
     module = types.ModuleType("fake_instrumentation_pkg")
@@ -58,16 +64,30 @@ def fake_registry(monkeypatch: pytest.MonkeyPatch) -> type[FakeInstrumentor]:
     return _Instrumentor
 
 
-def test_init_auto_instruments_available_instrumentors(
+def test_global_init_auto_instruments_available_instrumentors(
     fake_registry: type[FakeInstrumentor],
 ) -> None:
-    client = init(span_exporter=InMemorySpanExporter(), set_global=False)
+    client = init(span_exporter=InMemorySpanExporter(), set_global=True)
+    assert fake_registry.instrument_calls == [client._provider]
+
+
+def test_scoped_init_does_not_auto_instrument(fake_registry: type[FakeInstrumentor]) -> None:
+    # Instrumentors are process-global singletons — a scoped client must not
+    # silently reroute all LLM traffic in the process. Explicit opt-in only.
+    init(span_exporter=InMemorySpanExporter(), set_global=False)
+    assert fake_registry.instrument_calls == []
+
+
+def test_scoped_init_with_explicit_instruments_instruments(
+    fake_registry: type[FakeInstrumentor],
+) -> None:
+    client = init(span_exporter=InMemorySpanExporter(), set_global=False, instruments=["fake"])
     assert fake_registry.instrument_calls == [client._provider]
 
 
 def test_missing_instrumentor_package_is_skipped(fake_registry: type[FakeInstrumentor]) -> None:
     # "missing" spec's package is not importable — init() must not raise.
-    init(span_exporter=InMemorySpanExporter(), set_global=False)
+    init(span_exporter=InMemorySpanExporter(), set_global=True)
 
 
 def test_instruments_param_restricts(fake_registry: type[FakeInstrumentor]) -> None:
@@ -100,14 +120,37 @@ def test_requested_but_uninstalled_instrument_warns(
     assert any("missing" in record.message for record in caplog.records)
 
 
-def test_no_double_instrumentation_across_reinit(fake_registry: type[FakeInstrumentor]) -> None:
-    init(span_exporter=InMemorySpanExporter(), set_global=False)
-    init(span_exporter=InMemorySpanExporter(), set_global=False)
+def test_no_double_instrumentation_while_client_active(
+    fake_registry: type[FakeInstrumentor],
+) -> None:
+    init(span_exporter=InMemorySpanExporter(), set_global=True)
+    init(span_exporter=InMemorySpanExporter(), set_global=True)  # warn+skip
     assert len(fake_registry.instrument_calls) == 1
 
 
+def test_reinit_after_shutdown_rebinds_instrumentors(
+    fake_registry: type[FakeInstrumentor],
+) -> None:
+    first = init(span_exporter=InMemorySpanExporter(), set_global=True)
+    first.shutdown()
+    second = init(span_exporter=InMemorySpanExporter(), set_global=True)
+    # re-bound: uninstrumented from the dead provider, instrumented on the new one
+    assert fake_registry.uninstrument_calls == [None]
+    assert fake_registry.instrument_calls == [first._provider, second._provider]
+
+
+def test_externally_enabled_instrumentor_is_not_stolen(
+    fake_registry: type[FakeInstrumentor],
+) -> None:
+    external = object()
+    fake_registry().instrument(tracer_provider=external)  # someone else's setup
+    init(span_exporter=InMemorySpanExporter(), set_global=True)
+    assert fake_registry.instrument_calls == [external]  # left alone
+    assert fake_registry.uninstrument_calls == []
+
+
 def test_disabled_sdk_does_not_instrument(fake_registry: type[FakeInstrumentor]) -> None:
-    init(span_exporter=InMemorySpanExporter(), set_global=False, disabled=True)
+    init(span_exporter=InMemorySpanExporter(), set_global=True, disabled=True)
     assert fake_registry.instrument_calls == []
 
 

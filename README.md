@@ -86,6 +86,12 @@ Supported instruments: `openai`, `anthropic`, `langchain`, `llama-index`,
 `litellm`. Content captured by third-party instrumentors is covered by the same
 `mask` / `capture_content` controls as our own spans.
 
+Instrumentors patch libraries process-wide, so a scoped client
+(`init(set_global=False)`) only enables them when `instruments=[...]` is passed
+explicitly. Calling `init()` again while a client is active logs a warning and
+returns the existing client unchanged; call `client.shutdown()` first to
+reconfigure.
+
 ## Reliability
 
 Export is designed to never block or crash your application:

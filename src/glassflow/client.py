@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import threading
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -18,6 +20,11 @@ from .instrumentation import enable_instrumentations
 from .masking import MaskingSpanExporter
 from .semconv import TRACER_NAME
 
+logger = logging.getLogger(__name__)
+
+_lock = threading.Lock()
+_current_client: GlassflowClient | None = None
+
 
 def build_span_exporter(config: GlassflowConfig) -> SpanExporter:
     """Build the default OTLP/HTTP span exporter for a resolved config."""
@@ -33,6 +40,7 @@ class GlassflowClient:
     def __init__(self, provider: TracerProvider, config: GlassflowConfig) -> None:
         self._provider = provider
         self.config = config
+        self._is_shutdown = False
 
     def get_tracer(self, name: str = TRACER_NAME) -> trace.Tracer:
         return self._provider.get_tracer(name, __version__)
@@ -42,7 +50,13 @@ class GlassflowClient:
         return self._provider.force_flush(timeout_millis)
 
     def shutdown(self) -> None:
+        """Drain pending spans and stop. Releases the global init() slot."""
+        global _current_client
         self._provider.shutdown()
+        self._is_shutdown = True
+        with _lock:
+            if _current_client is self:
+                _current_client = None
 
 
 def init(
@@ -61,6 +75,10 @@ def init(
 ) -> GlassflowClient:
     """Initialize the SDK: build a tracer provider that exports OTLP traces.
 
+    Calling ``init()`` again while a global client is active logs a warning and
+    returns the existing client unchanged (the OpenTelemetry global tracer
+    provider is write-once); call ``shutdown()`` on it first to reconfigure.
+
     Args:
         endpoint: Base OTLP endpoint. Traces are sent to ``<endpoint>/v1/traces``.
         api_key: API key; injected as an ``Authorization: Bearer`` header.
@@ -73,9 +91,50 @@ def init(
         instruments: Auto-instrumentation selection. ``None`` (default) enables
             every bundled instrumentor whose package is installed; a list
             restricts to those names; ``[]`` disables auto-instrumentation.
+            Instrumentors are process-global, so with ``set_global=False`` they
+            are only enabled when ``instruments`` is passed explicitly.
         span_exporter: Override the default OTLP exporter (useful for testing).
         set_global: Register the provider as the global OpenTelemetry provider.
     """
+    global _current_client
+    with _lock:
+        if set_global and _current_client is not None and not _current_client._is_shutdown:
+            logger.warning(
+                "glassflow.init() was already called; keeping the existing configuration "
+                "(the OpenTelemetry global tracer provider is write-once). Call .shutdown() "
+                "on the existing client first if you need to reconfigure."
+            )
+            return _current_client
+        return _do_init(
+            endpoint=endpoint,
+            api_key=api_key,
+            service_name=service_name,
+            headers=headers,
+            disabled=disabled,
+            sample_rate=sample_rate,
+            capture_content=capture_content,
+            mask=mask,
+            instruments=instruments,
+            span_exporter=span_exporter,
+            set_global=set_global,
+        )
+
+
+def _do_init(
+    *,
+    endpoint: str | None,
+    api_key: str | None,
+    service_name: str | None,
+    headers: dict[str, str] | None,
+    disabled: bool | None,
+    sample_rate: float | None,
+    capture_content: bool | None,
+    mask: Callable[[Any], Any] | None,
+    instruments: Sequence[str] | None,
+    span_exporter: SpanExporter | None,
+    set_global: bool,
+) -> GlassflowClient:
+    global _current_client
     config = resolve_config(
         endpoint=endpoint,
         api_key=api_key,
@@ -104,13 +163,25 @@ def init(
             )
         provider.add_span_processor(BatchSpanProcessor(exporter))
 
-    if set_global:
+    if set_global and not config.disabled:
         trace.set_tracer_provider(provider)
+        if trace.get_tracer_provider() is not provider:
+            logger.warning(
+                "could not register the glassflow tracer provider as the OpenTelemetry "
+                "global (another provider is already set); spans from @observe and "
+                "glassflow.get_tracer() will keep using the pre-existing provider. Use "
+                "the returned client's get_tracer() for scoped tracing."
+            )
 
-    if not config.disabled:
+    # Instrumentors are process-global singletons: auto-enable only for a global
+    # init; a scoped client must opt in explicitly via `instruments=[...]`.
+    if not config.disabled and (set_global or instruments is not None):
         enable_instrumentations(provider, instruments)
 
-    return GlassflowClient(provider, config)
+    client = GlassflowClient(provider, config)
+    if set_global:
+        _current_client = client
+    return client
 
 
 def get_tracer(name: str = TRACER_NAME) -> trace.Tracer:

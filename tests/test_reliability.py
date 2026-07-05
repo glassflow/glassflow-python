@@ -1,4 +1,4 @@
-"""Reliable export pipeline (GLA2-25).
+"""Reliable export pipeline.
 
 The SDK must never block or crash the host application: span creation stays
 fast when the exporter is slow, backend failures never raise into app code,

@@ -6,6 +6,8 @@ spans between tests. `@observe` and other helpers that use the global tracer are
 exercised against this.
 """
 
+from collections.abc import Iterator
+
 import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -28,3 +30,14 @@ def exported_spans() -> InMemorySpanExporter:
     _ensure_global_provider()
     _EXPORTER.clear()
     return _EXPORTER
+
+
+@pytest.fixture(autouse=True)
+def _reset_glassflow_lifecycle() -> "Iterator[None]":
+    """Clear module-level init()/instrumentation state between tests."""
+    yield
+    from glassflow import client as client_module
+    from glassflow import instrumentation as instrumentation_module
+
+    client_module._current_client = None
+    instrumentation_module._ENABLED.clear()

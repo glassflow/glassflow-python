@@ -1,4 +1,4 @@
-"""Bundled auto-instrumentation via OpenInference/OpenLLMetry (GLA2-26).
+"""Bundled auto-instrumentation via OpenInference/OpenLLMetry.
 
 We reuse existing OTel instrumentors rather than rebuilding provider/framework
 instrumentation. The registry below maps a short name to an instrumentor class;
@@ -16,6 +16,11 @@ from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Instrumentors we enabled (name -> instance), so a legitimate re-init can
+# re-bind them to the new provider without touching instrumentation someone
+# else set up.
+_ENABLED: dict[str, Any] = {}
 
 
 @dataclass(frozen=True)
@@ -84,12 +89,18 @@ def enable_instrumentations(
         try:
             instrumentor = getattr(module, spec.class_name)()
             if getattr(instrumentor, "is_instrumented_by_opentelemetry", False):
-                continue  # e.g. init() called twice
+                if spec.name in _ENABLED:
+                    # We enabled it previously (e.g. before a shutdown/re-init):
+                    # re-bind it to the new provider.
+                    instrumentor.uninstrument()
+                else:
+                    continue  # someone else's instrumentation: leave it alone
             instrumentor.instrument(tracer_provider=tracer_provider)
         except Exception:
             # Instrumentation is best-effort: a broken instrumentor must not
             # take down init().
             logger.warning("failed to enable instrument %r", spec.name, exc_info=True)
             continue
+        _ENABLED[spec.name] = instrumentor
         enabled.append(spec.name)
     return enabled
