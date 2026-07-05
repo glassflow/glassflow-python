@@ -49,6 +49,16 @@ CONTENT_ATTRIBUTES = frozenset(
     }
 )
 
+# OpenInference/OpenLLMetry instrumentors flatten message content into indexed
+# keys (e.g. `llm.input_messages.0.message.content`) — matched by prefix.
+CONTENT_ATTRIBUTE_PREFIXES = (
+    "llm.input_messages.",
+    "llm.output_messages.",
+    "gen_ai.prompt.",
+    "gen_ai.completion.",
+    "llm.prompts.",
+)
+
 
 class SpanKind(str, Enum):
     """Observation kind. Values are OpenInference `openinference.span.kind` values."""

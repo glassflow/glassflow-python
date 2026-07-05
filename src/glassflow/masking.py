@@ -15,7 +15,7 @@ from typing import Any
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
-from .semconv import CONTENT_ATTRIBUTES
+from .semconv import CONTENT_ATTRIBUTE_PREFIXES, CONTENT_ATTRIBUTES
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,11 @@ class MaskingSpanExporter(SpanExporter):
         attributes: Any = getattr(span, "_attributes", None)
         if attributes is None:
             return
-        keys = [key for key in CONTENT_ATTRIBUTES if key in attributes]
+        keys = [
+            key
+            for key in attributes
+            if key in CONTENT_ATTRIBUTES or key.startswith(CONTENT_ATTRIBUTE_PREFIXES)
+        ]
         if not keys:
             return
         # A span's attributes are frozen once it ends; lift the guard to edit

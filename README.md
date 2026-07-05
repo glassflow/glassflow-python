@@ -64,6 +64,28 @@ glassflow.init(mask=lambda value: "[REDACTED]")   # redact all captured content
 glassflow.init(capture_content=False)             # drop content entirely, keep metadata
 ```
 
+## Auto-instrumentation
+
+The SDK bundles existing OTel instrumentors (OpenInference) as optional extras,
+so a single install captures your LLM provider and framework calls. Install the
+extras you need and `init()` enables whatever it finds; the instrumentation
+spans nest under your `@observe` / `start_as_current_span` traces automatically.
+
+```bash
+pip install "glassflow-ai[openai]"        # one provider
+pip install "glassflow-ai[instruments]"   # everything supported
+```
+
+```python
+glassflow.init()                          # auto-enables installed instrumentors
+glassflow.init(instruments=["openai"])    # restrict to specific ones
+glassflow.init(instruments=[])            # disable auto-instrumentation
+```
+
+Supported instruments: `openai`, `anthropic`, `langchain`, `llama-index`,
+`litellm`. Content captured by third-party instrumentors is covered by the same
+`mask` / `capture_content` controls as our own spans.
+
 ## Reliability
 
 Export is designed to never block or crash your application:
