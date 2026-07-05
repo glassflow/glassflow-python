@@ -12,8 +12,13 @@ def serialize(value: Any) -> str:
     """Serialize a value to a bounded string suitable for a span attribute."""
     try:
         text = json.dumps(value, default=repr)
-    except (TypeError, ValueError):
-        text = repr(value)
+    except Exception:
+        # default=repr can itself raise (broken __repr__, detached ORM proxies);
+        # tracing must never crash the host over an unserializable value.
+        try:
+            text = repr(value)
+        except Exception:
+            text = f"<unserializable {type(value).__name__}>"
     if len(text) > MAX_ATTR_CHARS:
         text = text[:MAX_ATTR_CHARS] + "…(truncated)"
     return text

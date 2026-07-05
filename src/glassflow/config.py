@@ -6,8 +6,11 @@ variables > built-in defaults.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_ENDPOINT = "https://ingest.glassflow.dev"
 DEFAULT_SERVICE_NAME = "unknown_service"
@@ -57,6 +60,15 @@ class GlassflowConfig:
         return self.endpoint.rstrip("/") + "/v1/traces"
 
 
+def _clamp_sample_rate(value: float) -> float:
+    """Clamp to [0.0, 1.0] — an out-of-range value must degrade, not crash init()."""
+    if 0.0 <= value <= 1.0:
+        return value
+    clamped = min(max(value, 0.0), 1.0)
+    logger.warning("sample_rate %s is outside [0.0, 1.0]; clamped to %s", value, clamped)
+    return clamped
+
+
 def resolve_config(
     *,
     endpoint: str | None = None,
@@ -72,7 +84,7 @@ def resolve_config(
     resolved_api_key = api_key if api_key is not None else os.getenv(ENV_API_KEY)
     resolved_service_name = service_name or os.getenv(ENV_SERVICE_NAME) or DEFAULT_SERVICE_NAME
     resolved_disabled = _env_bool(ENV_DISABLED, default=False) if disabled is None else disabled
-    resolved_sample_rate = (
+    resolved_sample_rate = _clamp_sample_rate(
         _env_float(ENV_SAMPLE_RATE, default=1.0) if sample_rate is None else sample_rate
     )
     resolved_capture_content = (

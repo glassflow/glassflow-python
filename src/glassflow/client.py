@@ -144,12 +144,13 @@ def _do_init(
         sample_rate=sample_rate,
         capture_content=capture_content,
     )
+    # telemetry.sdk.* is reserved for the OTel SDK itself (Resource.create fills
+    # it); we identify as a distribution via telemetry.distro.*.
     resource = Resource.create(
         {
             "service.name": config.service_name,
-            "telemetry.sdk.name": "glassflow-ai",
-            "telemetry.sdk.version": __version__,
-            "telemetry.sdk.language": "python",
+            "telemetry.distro.name": "glassflow-ai",
+            "telemetry.distro.version": __version__,
         }
     )
     sampler = ParentBased(root=TraceIdRatioBased(config.sample_rate))

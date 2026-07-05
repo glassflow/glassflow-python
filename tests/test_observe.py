@@ -1,6 +1,8 @@
 import asyncio
+from collections.abc import Iterator
 
 import pytest
+from opentelemetry import trace
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
@@ -137,3 +139,58 @@ def test_async_generator(exported_spans: InMemorySpanExporter) -> None:
     spans = exported_spans.get_finished_spans()
     assert len(spans) == 1
     assert spans[0].name == "agen"
+
+
+# --- exception recording and generator context hygiene ---
+
+
+def test_exception_recorded_exactly_once(exported_spans: InMemorySpanExporter) -> None:
+    @observe
+    def boom() -> None:
+        raise ValueError("nope")
+
+    with pytest.raises(ValueError):
+        boom()
+    span = exported_spans.get_finished_spans()[0]
+    exception_events = [e for e in span.events if e.name == "exception"]
+    assert len(exception_events) == 1
+    assert span.status.status_code == trace.StatusCode.ERROR
+
+
+def test_generator_does_not_leak_context_into_caller(
+    exported_spans: InMemorySpanExporter,
+) -> None:
+    @observe
+    def stream() -> "Iterator[int]":
+        yield 1
+        yield 2
+
+    g = stream()
+    next(g)
+    # between yields, the caller's context must NOT have the generator span active
+    assert trace.get_current_span() is trace.INVALID_SPAN
+    tracer = trace.get_tracer("caller")
+    with tracer.start_as_current_span("caller-work"):
+        pass
+    next(g, None)
+    g.close()
+
+    spans = {s.name: s for s in exported_spans.get_finished_spans()}
+    assert spans["caller-work"].parent is None  # not parented under the generator
+
+
+def test_generator_body_spans_still_nest_under_generator_span(
+    exported_spans: InMemorySpanExporter,
+) -> None:
+    tracer = trace.get_tracer("inner")
+
+    @observe
+    def stream() -> "Iterator[int]":
+        with tracer.start_as_current_span("inner-work"):
+            yield 1
+
+    list(stream())
+    spans = {s.name: s for s in exported_spans.get_finished_spans()}
+    gen_span = spans[next(n for n in spans if n.endswith("stream"))]
+    assert spans["inner-work"].parent is not None
+    assert spans["inner-work"].parent.span_id == gen_span.context.span_id

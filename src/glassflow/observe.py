@@ -13,6 +13,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
@@ -71,19 +72,31 @@ def observe(
                 span.set_attribute(OUTPUT_VALUE, serialize(result))
 
         if inspect.isasyncgenfunction(fn):
+            # Generators interleave with caller code between yields, so the span
+            # is only attached around each step — never leaked into the caller.
 
             @functools.wraps(fn)
             async def async_gen_wrapper(*args: Any, **kwargs: Any) -> Any:
                 tracer = trace.get_tracer(TRACER_NAME, __version__)
-                with tracer.start_as_current_span(span_name) as span:
-                    set_span_kind(span, kind)
-                    _set_input(span, args, kwargs)
-                    try:
-                        async for item in fn(*args, **kwargs):
-                            yield item
-                    except Exception as exc:
-                        _record_exception(span, exc)
-                        raise
+                span = tracer.start_span(span_name)
+                set_span_kind(span, kind)
+                _set_input(span, args, kwargs)
+                agen = fn(*args, **kwargs)
+                try:
+                    while True:
+                        token = otel_context.attach(trace.set_span_in_context(span))
+                        try:
+                            item = await agen.__anext__()
+                        except StopAsyncIteration:
+                            break
+                        finally:
+                            otel_context.detach(token)
+                        yield item
+                except Exception as exc:
+                    _record_exception(span, exc)
+                    raise
+                finally:
+                    span.end()
 
             return async_gen_wrapper
 
@@ -92,7 +105,9 @@ def observe(
             @functools.wraps(fn)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 tracer = trace.get_tracer(TRACER_NAME, __version__)
-                with tracer.start_as_current_span(span_name) as span:
+                with tracer.start_as_current_span(
+                    span_name, record_exception=False, set_status_on_exception=False
+                ) as span:
                     set_span_kind(span, kind)
                     _set_input(span, args, kwargs)
                     try:
@@ -106,25 +121,39 @@ def observe(
             return async_wrapper
 
         if inspect.isgeneratorfunction(fn):
+            # See the async-generator note: attach only around each step.
 
             @functools.wraps(fn)
             def gen_wrapper(*args: Any, **kwargs: Any) -> Any:
                 tracer = trace.get_tracer(TRACER_NAME, __version__)
-                with tracer.start_as_current_span(span_name) as span:
-                    set_span_kind(span, kind)
-                    _set_input(span, args, kwargs)
-                    try:
-                        yield from fn(*args, **kwargs)
-                    except Exception as exc:
-                        _record_exception(span, exc)
-                        raise
+                span = tracer.start_span(span_name)
+                set_span_kind(span, kind)
+                _set_input(span, args, kwargs)
+                gen = fn(*args, **kwargs)
+                try:
+                    while True:
+                        token = otel_context.attach(trace.set_span_in_context(span))
+                        try:
+                            item = next(gen)
+                        except StopIteration:
+                            break
+                        finally:
+                            otel_context.detach(token)
+                        yield item
+                except Exception as exc:
+                    _record_exception(span, exc)
+                    raise
+                finally:
+                    span.end()
 
             return gen_wrapper
 
         @functools.wraps(fn)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = trace.get_tracer(TRACER_NAME, __version__)
-            with tracer.start_as_current_span(span_name) as span:
+            with tracer.start_as_current_span(
+                span_name, record_exception=False, set_status_on_exception=False
+            ) as span:
                 set_span_kind(span, kind)
                 _set_input(span, args, kwargs)
                 try:
