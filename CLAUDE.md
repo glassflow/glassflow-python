@@ -78,10 +78,12 @@ formatter/linter (no black/isort/flake8). Commit `uv.lock`.
 
 - **Branch from `main`.** Branch names: `<user>/<TICKET>-short-desc`
   (e.g. `pablo/gla2-19-observe-decorator`). Linear team key is `GLA2`.
-- **Conventional Commits are mandatory** — they drive releases:
-  `feat:` (minor), `fix:` (patch), `feat!:` / `BREAKING CHANGE:` (major), plus
-  `chore:`/`docs:`/`test:`/`refactor:`/`ci:`. Non-conforming commits are ignored
-  for versioning.
+- **PRs are squash-merged; the PR title becomes the commit on `main`** and is
+  what release-please reads (the squash body is blank). PR titles must therefore
+  be Conventional Commits: `feat:` (minor), `fix:` (patch), `feat!:` (breaking —
+  must be marked in the **title**, since `BREAKING CHANGE:` footers in branch
+  commits don't survive the squash), plus `chore:`/`docs:`/`test:`/`refactor:`/
+  `ci:`. Non-conforming titles are ignored for versioning.
 - **No AI attribution** in commits or PRs (no `Co-Authored-By: Claude`, no
   "Generated with…" trailers).
-- Open a PR; CI (lint/format/mypy + tests on Python 3.10–3.13) must pass to merge.
+- Open a PR; CI (lint/format/mypy + tests on Python 3.10–3.14 + extras smoke) must pass to merge.
