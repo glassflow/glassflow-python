@@ -46,6 +46,8 @@ REGISTRY: tuple[InstrumentorSpec, ...] = (
         "llama-index", "openinference.instrumentation.llama_index", "LlamaIndexInstrumentor"
     ),
     InstrumentorSpec("litellm", "openinference.instrumentation.litellm", "LiteLLMInstrumentor"),
+    # ours — first-class MCP tool-call spans (see instrumentation_mcp.py)
+    InstrumentorSpec("mcp", "glassflow.instrumentation_mcp", "MCPInstrumentor"),
 )
 
 

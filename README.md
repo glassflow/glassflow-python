@@ -85,8 +85,14 @@ glassflow.init(instruments=[])            # disable auto-instrumentation
 ```
 
 Supported instruments: `openai`, `anthropic`, `langchain`, `llama-index`,
-`litellm`. Content captured by third-party instrumentors is covered by the same
+`litellm`, and `mcp`. Content captured by instrumentors is covered by the same
 `mask` / `capture_content` controls as our own spans.
+
+The `mcp` instrument is built in: if the [`mcp`](https://pypi.org/project/mcp/)
+package is installed, every `ClientSession.call_tool()` your agent makes becomes
+a first-class TOOL span (`execute_tool <name>`) with `gen_ai.tool.name`, the
+arguments and result as `input.value`/`output.value`, latency, and error status
+(including tools that return `isError` results).
 
 Instrumentors patch libraries process-wide, so a scoped client
 (`init(set_global=False)`) only enables them when `instruments=[...]` is passed
