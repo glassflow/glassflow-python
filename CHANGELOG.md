@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/glassflow/glassflow-python/compare/v0.3.0...v0.4.0) (2026-07-06)
+
+
+### Features
+
+* first-class MCP tool-call instrumentation ([#24](https://github.com/glassflow/glassflow-python/issues/24)) ([623004f](https://github.com/glassflow/glassflow-python/commit/623004fdd388b7244d7bbc4374b1023ea7680793))
+
 ## [0.3.0](https://github.com/glassflow/glassflow-python/compare/v0.2.0...v0.3.0) (2026-07-05)
 
 
