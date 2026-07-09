@@ -57,7 +57,21 @@ def observe(
 ) -> Any:
     """Decorate a function so each call is traced as a span.
 
-    Usable bare (`@observe`) or parameterized (`@observe(name=..., ...)`).
+    Usable bare (``@observe``) or parameterized (``@observe(name=..., ...)``).
+    Supports sync functions, ``async def`` functions, generators, and async
+    generators; for generators the span covers the whole iteration and the
+    tracing context is attached only around each step. Exceptions are
+    recorded with ERROR status and always re-raised.
+
+    Args:
+        func: The decorated function (filled in by bare ``@observe`` usage).
+        name: Span name; defaults to the function's ``__qualname__``.
+        capture_input: Record call arguments as JSON in ``input.value``.
+        capture_output: Record the return value as JSON in ``output.value``.
+        kind: Span taxonomy (``openinference.span.kind``); default ``CHAIN``.
+
+    Returns:
+        The wrapped function (or a decorator, when used parameterized).
     """
 
     def decorate(fn: Callable[..., Any]) -> Callable[..., Any]:

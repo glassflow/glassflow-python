@@ -27,7 +27,15 @@ _current_client: GlassflowClient | None = None
 
 
 def build_span_exporter(config: GlassflowConfig) -> SpanExporter:
-    """Build the default OTLP/HTTP span exporter for a resolved config."""
+    """Build the default OTLP/HTTP span exporter for a resolved config.
+
+    Args:
+        config: A resolved configuration; the exporter posts to
+            ``config.traces_endpoint`` with ``config.headers``.
+
+    Returns:
+        A ready-to-use OTLP/HTTP ``SpanExporter``.
+    """
     return OTLPSpanExporter(
         endpoint=config.traces_endpoint,
         headers=config.headers or None,
@@ -35,7 +43,12 @@ def build_span_exporter(config: GlassflowConfig) -> SpanExporter:
 
 
 class GlassflowClient:
-    """Handle over a configured tracer provider."""
+    """Handle over a configured tracer provider.
+
+    Returned by ``init``. Exposes the lifecycle operations (``flush``,
+    ``shutdown``) and tracer access for the pipeline it owns; the resolved
+    configuration is available as ``client.config``.
+    """
 
     def __init__(self, provider: TracerProvider, config: GlassflowConfig) -> None:
         self._provider = provider
@@ -43,6 +56,11 @@ class GlassflowClient:
         self._is_shutdown = False
 
     def get_tracer(self, name: str = TRACER_NAME) -> trace.Tracer:
+        """Return a tracer bound to this client's provider.
+
+        Args:
+            name: Instrumentation scope name; defaults to the SDK's own.
+        """
         return self._provider.get_tracer(name, __version__)
 
     def flush(self, timeout_millis: int = 30_000) -> bool:

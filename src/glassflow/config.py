@@ -44,7 +44,11 @@ def _env_float(name: str, *, default: float) -> float:
 
 @dataclass(frozen=True)
 class GlassflowConfig:
-    """Resolved, immutable SDK configuration."""
+    """Resolved, immutable SDK configuration.
+
+    Produced by ``resolve_config`` (arguments over environment over
+    defaults); consumed by ``init`` and ``build_span_exporter``.
+    """
 
     endpoint: str
     api_key: str | None
@@ -79,7 +83,31 @@ def resolve_config(
     sample_rate: float | None = None,
     capture_content: bool | None = None,
 ) -> GlassflowConfig:
-    """Resolve SDK configuration from arguments, environment, then defaults."""
+    """Resolve SDK configuration from arguments, environment, then defaults.
+
+    Explicit arguments win over ``GLASSFLOW_*`` environment variables, which
+    win over built-in defaults. ``sample_rate`` is clamped to ``[0.0, 1.0]``
+    with a warning; boolean environment variables accept ``1``/``true``/
+    ``yes``/``on`` (case-insensitive).
+
+    Args:
+        endpoint: Base OTLP endpoint (``GLASSFLOW_ENDPOINT``).
+        api_key: Bearer token for the managed platform (``GLASSFLOW_API_KEY``);
+            ``None`` sends no Authorization header.
+        service_name: ``service.name`` resource attribute
+            (``GLASSFLOW_SERVICE_NAME``).
+        headers: Extra exporter headers; an explicit ``Authorization`` entry
+            wins over ``api_key``.
+        disabled: Kill switch (``GLASSFLOW_DISABLED``); spans are dropped
+            in-process.
+        sample_rate: Head-sampling ratio for root traces
+            (``GLASSFLOW_SAMPLE_RATE``).
+        capture_content: When ``False``, content attributes are stripped at
+            export (``GLASSFLOW_CAPTURE_CONTENT``).
+
+    Returns:
+        The resolved, immutable ``GlassflowConfig``.
+    """
     resolved_endpoint = endpoint or os.getenv(ENV_ENDPOINT) or DEFAULT_ENDPOINT
     resolved_api_key = api_key if api_key is not None else os.getenv(ENV_API_KEY)
     resolved_service_name = service_name or os.getenv(ENV_SERVICE_NAME) or DEFAULT_SERVICE_NAME
