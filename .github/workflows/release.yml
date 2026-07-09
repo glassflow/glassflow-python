@@ -12,6 +12,7 @@ jobs:
       pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
@@ -37,3 +38,37 @@ jobs:
       - run: uv run pytest
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+
+  # Announce on Slack AFTER the PyPI publish succeeds, so the channel only
+  # ever sees releases that actually shipped. A separate `on: release`
+  # workflow would never fire: release-please creates the GitHub Release with
+  # GITHUB_TOKEN, whose events don't trigger other workflows.
+  notify:
+    needs: [release-please, publish]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Post release summary to Slack
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_RELEASES }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK" ]; then
+            echo "SLACK_WEBHOOK_RELEASES not configured; skipping." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          release_json=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body,url)
+          url=$(jq -r .url <<<"$release_json")
+          # release-please changelog markdown -> Slack mrkdwn:
+          # headings to bold, **bold** to *bold*, [text](url) to <url|text>
+          body=$(jq -r .body <<<"$release_json" | sed -E \
+            -e 's/^#{1,6} +(.*)$/*\1*/' \
+            -e 's/\*\*([^*]+)\*\*/*\1*/g' \
+            -e 's/\[([^]]+)\]\(([^)]+)\)/<\2|\1>/g' \
+            | head -c 3500)
+          jq -n --arg tag "$TAG" --arg url "$url" --arg body "$body" \
+            '{text: (":package: *glassflow-ai \($tag)* is on PyPI (<\($url)|release notes>)\n\n\($body)")}' \
+            | curl -sS --fail-with-body -X POST -H 'Content-Type: application/json' -d @- "$SLACK_WEBHOOK"
