@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/glassflow/glassflow-python/compare/v0.4.0...v0.4.1) (2026-07-09)
+
+
+### Documentation
+
+* complete Google-style docstrings for the public API ([#26](https://github.com/glassflow/glassflow-python/issues/26)) ([75d82a1](https://github.com/glassflow/glassflow-python/commit/75d82a19617f89cebdc813f61757fdc3a5119b46))
+
 ## [0.4.0](https://github.com/glassflow/glassflow-python/compare/v0.3.0...v0.4.0) (2026-07-06)
 
 
