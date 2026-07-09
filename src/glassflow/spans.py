@@ -28,27 +28,60 @@ from .semconv import INPUT_VALUE, OUTPUT_VALUE, TRACER_NAME, SpanKind, set_span_
 
 
 class Observation:
-    """Handle for annotating a span."""
+    """Handle for annotating a span from ``start_span`` / ``start_as_current_span``.
+
+    Wraps an OpenTelemetry span and exposes the annotation surface for generic
+    (non-LLM) spans: input, output, and arbitrary attributes. Inputs and
+    outputs are serialized to JSON (with a ``repr`` fallback) and truncated at
+    8192 characters.
+    """
 
     def __init__(self, span: Span) -> None:
         self._span = span
 
     def set_input(self, value: Any) -> None:
+        """Record the span input (the ``input.value`` attribute).
+
+        Args:
+            value: Any value; serialized to JSON with a ``repr`` fallback.
+        """
         self._span.set_attribute(INPUT_VALUE, serialize(value))
 
     def set_output(self, value: Any) -> None:
+        """Record the span output (the ``output.value`` attribute).
+
+        Args:
+            value: Any value; serialized to JSON with a ``repr`` fallback.
+        """
         self._span.set_attribute(OUTPUT_VALUE, serialize(value))
 
     def set_attribute(self, key: str, value: Any) -> None:
+        """Set an arbitrary attribute on the underlying span.
+
+        Args:
+            key: Attribute name.
+            value: An OpenTelemetry-compatible attribute value.
+        """
         self._span.set_attribute(key, value)
 
     def update(self, *, input: Any = None, output: Any = None) -> None:
+        """Record input and/or output in one call.
+
+        Args:
+            input: When not ``None``, forwarded to :meth:`set_input`.
+            output: When not ``None``, forwarded to :meth:`set_output`.
+        """
         if input is not None:
             self.set_input(input)
         if output is not None:
             self.set_output(output)
 
     def end(self) -> None:
+        """End the underlying span.
+
+        Required for spans created with ``start_span``; spans from
+        ``start_as_current_span`` end automatically when the block exits.
+        """
         self._span.end()
 
 

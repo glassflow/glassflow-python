@@ -73,14 +73,22 @@ CONTENT_ATTRIBUTE_SUFFIXES = (
 
 
 class SpanKind(str, Enum):
-    """Observation kind. Values are OpenInference `openinference.span.kind` values."""
+    """Observation kind. Values are OpenInference ``openinference.span.kind`` values.
+
+    - ``AGENT``: an agent invocation or run
+    - ``LLM``: a model call (generations use this)
+    - ``TOOL``: a tool execution
+    - ``RETRIEVER``: a retrieval / search step
+    - ``EMBEDDING``: an embedding computation
+    - ``CHAIN``: a generic processing step (the default)
+    """
 
     AGENT = "AGENT"
     LLM = "LLM"
     TOOL = "TOOL"
     RETRIEVER = "RETRIEVER"
     EMBEDDING = "EMBEDDING"
-    CHAIN = "CHAIN"  # generic processing step (OpenInference's general-purpose kind)
+    CHAIN = "CHAIN"
 
 
 # SpanKind -> OTel GenAI gen_ai.operation.name, where a canonical operation exists.

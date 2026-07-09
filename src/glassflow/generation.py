@@ -108,40 +108,91 @@ def _serialize_messages(messages: Messages, default_role: str) -> str:
 
 
 class Generation:
-    """Handle for recording gen_ai attributes on an LLM span."""
+    """Handle for recording gen_ai attributes on an LLM span.
+
+    Returned by ``start_generation`` and ``start_as_current_generation``.
+    Messages passed to :meth:`set_input` / :meth:`set_output` are normalized
+    to the GenAI message shape (``{"role", "parts": [...]}``): bare strings,
+    OpenAI-style dicts (including ``tool_calls`` and tool responses), and
+    multimodal content lists are all accepted.
+    """
 
     def __init__(self, span: Span) -> None:
         self._span = span
 
     def set_input(self, messages: Messages) -> None:
+        """Record the request messages (``gen_ai.input.messages``).
+
+        Args:
+            messages: A string or list of messages in any supported format;
+                bare strings default to the ``user`` role.
+        """
         self._span.set_attribute(GEN_AI_INPUT_MESSAGES, _serialize_messages(messages, "user"))
 
     def set_output(self, messages: Messages) -> None:
+        """Record the response messages (``gen_ai.output.messages``).
+
+        Args:
+            messages: A string or list of messages in any supported format;
+                bare strings default to the ``assistant`` role.
+        """
         self._span.set_attribute(GEN_AI_OUTPUT_MESSAGES, _serialize_messages(messages, "assistant"))
 
     def set_response_model(self, response_model: str) -> None:
+        """Record the model that produced the response (``gen_ai.response.model``).
+
+        Args:
+            response_model: Model identifier as reported by the provider,
+                which may differ from the requested model.
+        """
         self._span.set_attribute(GEN_AI_RESPONSE_MODEL, response_model)
 
     def set_usage(
         self, *, input_tokens: int | None = None, output_tokens: int | None = None
     ) -> None:
+        """Record token usage (``gen_ai.usage.input_tokens`` / ``output_tokens``).
+
+        Send token counts, never cost: cost is computed server-side from
+        model pricing.
+
+        Args:
+            input_tokens: Prompt tokens consumed, when known.
+            output_tokens: Completion tokens produced, when known.
+        """
         if input_tokens is not None:
             self._span.set_attribute(GEN_AI_USAGE_INPUT_TOKENS, input_tokens)
         if output_tokens is not None:
             self._span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, output_tokens)
 
     def set_finish_reasons(self, reasons: str | list[str]) -> None:
+        """Record why generation stopped (``gen_ai.response.finish_reasons``).
+
+        Args:
+            reasons: A single reason (wrapped into a list) or a list of
+                reasons, e.g. ``"stop"``, ``"length"``, ``"tool_calls"``.
+        """
         if isinstance(reasons, str):
             reasons = [reasons]
         self._span.set_attribute(GEN_AI_RESPONSE_FINISH_REASONS, reasons)
 
     def update(self, *, input: Messages | None = None, output: Messages | None = None) -> None:
+        """Record input and/or output messages in one call.
+
+        Args:
+            input: When not ``None``, forwarded to :meth:`set_input`.
+            output: When not ``None``, forwarded to :meth:`set_output`.
+        """
         if input is not None:
             self.set_input(input)
         if output is not None:
             self.set_output(output)
 
     def end(self) -> None:
+        """End the underlying span.
+
+        Required for generations created with ``start_generation``; spans from
+        ``start_as_current_generation`` end automatically when the block exits.
+        """
         self._span.end()
 
 
@@ -181,6 +232,18 @@ def start_generation(
 
     Manual counterpart to ``start_as_current_generation``: not set as current, no
     auto-recording of exceptions.
+
+    Args:
+        name: Span name.
+        model: Requested model (``gen_ai.request.model``).
+        provider: Provider name (``gen_ai.provider.name``), e.g. ``"openai"``.
+        input: Request messages, recorded immediately via ``set_input``.
+        model_parameters: Request parameters, each recorded as
+            ``gen_ai.request.<key>``.
+        operation: Operation name (``gen_ai.operation.name``); default ``"chat"``.
+
+    Returns:
+        A ``Generation`` handle; call ``.end()`` when the call completes.
     """
     span = trace.get_tracer(TRACER_NAME, __version__).start_span(name)
     generation = Generation(span)
@@ -205,7 +268,16 @@ def start_as_current_generation(
     model_parameters: dict[str, Any] | None = None,
     operation: str = "chat",
 ) -> Iterator[Generation]:
-    """Open an LLM-kind span as the current span and yield a ``Generation``; auto-ends."""
+    """Open an LLM-kind span as the current span and yield a ``Generation``; auto-ends.
+
+    Children created inside the block nest under this span, and exceptions
+    raised in the block are recorded with ERROR status, then re-raised.
+    Accepts the same arguments as ``start_generation``.
+
+    Yields:
+        A ``Generation`` handle for recording messages, usage, and response
+        metadata; the span ends when the block exits.
+    """
     tracer = trace.get_tracer(TRACER_NAME, __version__)
     with tracer.start_as_current_span(name) as span:
         generation = Generation(span)
