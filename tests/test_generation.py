@@ -1,5 +1,6 @@
 import json
 
+from opentelemetry.sdk.trace import Event, ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from glassflow import start_as_current_generation, start_generation
@@ -241,3 +242,45 @@ def test_manual_generation(exported_spans: InMemorySpanExporter) -> None:
     assert attrs["gen_ai.request.model"] == "gpt-4o"
     assert "hi" in attrs["gen_ai.output.messages"]
     assert attrs["gen_ai.usage.input_tokens"] == 1
+
+
+# --- record_first_token: the TTFT anchor for streaming (GLA2-175) ---
+
+
+def _first_token_events(span: ReadableSpan) -> list[Event]:
+    return [e for e in span.events if e.name == "gen_ai.first_token"]
+
+
+def test_record_first_token_adds_event_between_start_and_end(
+    exported_spans: InMemorySpanExporter,
+) -> None:
+    with start_as_current_generation("chat") as gen:
+        gen.record_first_token()
+    span = exported_spans.get_finished_spans()[0]
+    (event,) = _first_token_events(span)
+    assert span.start_time <= event.timestamp <= span.end_time
+
+
+def test_record_first_token_is_idempotent(exported_spans: InMemorySpanExporter) -> None:
+    with start_as_current_generation("chat") as gen:
+        gen.record_first_token()
+        gen.record_first_token()
+        gen.record_first_token()
+    span = exported_spans.get_finished_spans()[0]
+    assert len(_first_token_events(span)) == 1
+
+
+def test_record_first_token_after_end_is_noop(exported_spans: InMemorySpanExporter) -> None:
+    gen = start_generation("chat")
+    gen.end()
+    gen.record_first_token()  # must neither raise nor record
+    span = exported_spans.get_finished_spans()[0]
+    assert _first_token_events(span) == []
+
+
+def test_record_first_token_on_manual_generation(exported_spans: InMemorySpanExporter) -> None:
+    gen = start_generation("chat", model="gpt-4o")
+    gen.record_first_token()
+    gen.end()
+    span = exported_spans.get_finished_spans()[0]
+    assert len(_first_token_events(span)) == 1
