@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/glassflow/glassflow-python/compare/v0.4.1...v0.5.0) (2026-07-15)
+
+
+### Features
+
+* record time-to-first-token on streaming generations ([#29](https://github.com/glassflow/glassflow-python/issues/29)) ([6c1ecaa](https://github.com/glassflow/glassflow-python/commit/6c1ecaa46c7086b2bbdccc5a4d4dd7ade036c3c7))
+
 ## [0.4.1](https://github.com/glassflow/glassflow-python/compare/v0.4.0...v0.4.1) (2026-07-09)
 
 
