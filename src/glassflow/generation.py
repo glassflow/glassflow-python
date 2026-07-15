@@ -18,6 +18,7 @@ from opentelemetry.trace import Span
 from . import __version__
 from ._serde import serialize
 from .semconv import (
+    GEN_AI_FIRST_TOKEN_EVENT,
     GEN_AI_INPUT_MESSAGES,
     GEN_AI_OPERATION_NAME,
     GEN_AI_OUTPUT_MESSAGES,
@@ -119,6 +120,7 @@ class Generation:
 
     def __init__(self, span: Span) -> None:
         self._span = span
+        self._first_token_recorded = False
 
     def set_input(self, messages: Messages) -> None:
         """Record the request messages (``gen_ai.input.messages``).
@@ -163,6 +165,19 @@ class Generation:
             self._span.set_attribute(GEN_AI_USAGE_INPUT_TOKENS, input_tokens)
         if output_tokens is not None:
             self._span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, output_tokens)
+
+    def record_first_token(self) -> None:
+        """Mark the arrival of the first streamed token (``gen_ai.first_token`` event).
+
+        Call from a streaming loop when the first content chunk arrives; the
+        backend derives time-to-first-token as the event time minus the span
+        start. Idempotent — only the first call records; safe to call
+        unconditionally per chunk. A no-op after ``end()``.
+        """
+        if self._first_token_recorded or not self._span.is_recording():
+            return
+        self._span.add_event(GEN_AI_FIRST_TOKEN_EVENT)
+        self._first_token_recorded = True
 
     def set_finish_reasons(self, reasons: str | list[str]) -> None:
         """Record why generation stopped (``gen_ai.response.finish_reasons``).

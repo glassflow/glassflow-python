@@ -33,6 +33,13 @@ GEN_AI_RESPONSE_FINISH_REASONS = "gen_ai.response.finish_reasons"
 GEN_AI_TOOL_NAME = "gen_ai.tool.name"
 GEN_AI_REQUEST_PREFIX = "gen_ai.request."
 
+# --- Span event names ---
+# First streamed token/chunk arrived — the TTFT anchor (event time minus span
+# start). No client-side semconv exists for this yet (OTel only standardizes
+# the server-side gen_ai.server.time_to_first_token metric); this follows the
+# gen_ai.* naming style, precedent Langfuse's completion_start_time.
+GEN_AI_FIRST_TOKEN_EVENT = "gen_ai.first_token"
+
 # Attribute keys carrying user content — masked/stripped at export (see masking.py).
 CONTENT_ATTRIBUTES = frozenset(
     {
