@@ -244,7 +244,7 @@ def test_manual_generation(exported_spans: InMemorySpanExporter) -> None:
     assert attrs["gen_ai.usage.input_tokens"] == 1
 
 
-# --- record_first_token: the TTFT anchor for streaming (GLA2-175) ---
+# --- record_first_token: the TTFT anchor for streaming ---
 
 
 def _first_token_events(span: ReadableSpan) -> list[Event]:
