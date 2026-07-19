@@ -30,6 +30,7 @@ import os
 import threading
 import urllib.request
 import uuid
+import weakref
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -44,6 +45,32 @@ logger = logging.getLogger(__name__)
 PAYLOAD_VERSION = 1
 OPEN_TRACES_CAP = 32
 _PING_TIMEOUT_S = 3.0
+# The final stopped ping runs inside atexit: it must never hold the user's
+# process exit hostage, so it gets a tighter budget than regular pings (a
+# missed stopped ping just reports as gone instead of stopped — acceptable).
+_FINAL_PING_TIMEOUT_S = 1.0
+
+# os.register_at_fork callbacks can NEVER be unregistered, so per-sender
+# registration would leak a callback + sender reference for every init()
+# in a long-lived app. One module-level handler + a weak registry instead:
+# stopped/collected senders simply vanish from the set.
+_active_senders: weakref.WeakSet[HeartbeatSender] = weakref.WeakSet()
+_fork_hook_installed = False
+_fork_hook_lock = threading.Lock()
+
+
+def _reset_active_senders_in_child() -> None:  # pragma: no cover — fork-only
+    for sender in list(_active_senders):
+        sender._reset_in_child()  # noqa: SLF001 — module-internal
+
+
+def _install_fork_hook() -> None:
+    global _fork_hook_installed
+    with _fork_hook_lock:
+        if _fork_hook_installed or not hasattr(os, "register_at_fork"):
+            return
+        os.register_at_fork(after_in_child=_reset_active_senders_in_child)
+        _fork_hook_installed = True
 
 
 class OpenRootSpanTracker(SpanProcessor):
@@ -98,17 +125,22 @@ class OpenRootSpanTracker(SpanProcessor):
         return True
 
 
-def _http_transport(url: str, headers: dict[str, str]) -> Callable[[dict[str, Any]], None]:
-    """Default transport: a plain POST with a short timeout, no retries."""
+def _http_transport(url: str, headers: dict[str, str]) -> Callable[[dict[str, Any], float], None]:
+    """Default transport: a plain POST with a per-call timeout, no retries.
 
-    def send(payload: dict[str, Any]) -> None:
+    TLS certificate verification is urllib's default and is deliberately not
+    configurable here — a liveness signal must not become a reason to accept
+    unverified endpoints.
+    """
+
+    def send(payload: dict[str, Any], timeout: float) -> None:
         request = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", **headers},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=_PING_TIMEOUT_S):
+        with urllib.request.urlopen(request, timeout=timeout):
             pass  # 2xx is success; the body is ignored by contract
 
     return send
@@ -126,11 +158,19 @@ class HeartbeatSender:
         agent_name: str,
         tracker: OpenRootSpanTracker,
         transport: Callable[[dict[str, Any]], None] | None = None,
+        ping_timeout: float = _PING_TIMEOUT_S,
+        final_ping_timeout: float = _FINAL_PING_TIMEOUT_S,
     ) -> None:
         self._interval = interval
         self._agent_name = agent_name
         self._tracker = tracker
-        self._transport = transport if transport is not None else _http_transport(url, headers)
+        self._ping_timeout = ping_timeout
+        self._final_ping_timeout = final_ping_timeout
+        if transport is not None:
+            # Injected transports (tests) take the payload only.
+            self._send: Callable[[dict[str, Any], float], None] = lambda p, _t: transport(p)
+        else:
+            self._send = _http_transport(url, headers)
         self._instance_id = str(uuid.uuid4())
         self._stop_event = threading.Event()
         self._stopped = False
@@ -148,20 +188,29 @@ class HeartbeatSender:
         self._thread = threading.Thread(target=self._run, name="glassflow-heartbeat", daemon=True)
         self._thread.start()
         atexit.register(self.stop)
-        # A forked child must never reuse the parent's identity; re-arm with
-        # a fresh instance_id (same pattern the OTel exporter uses).
-        if hasattr(os, "register_at_fork"):  # pragma: no branch
-            os.register_at_fork(after_in_child=self._reset_in_child)
+        # A forked child must never reuse the parent's identity; the shared
+        # module-level fork hook re-arms every live sender with a fresh
+        # instance_id (same pattern the OTel exporter uses).
+        _active_senders.add(self)
+        _install_fork_hook()
 
     def stop(self) -> None:
-        """Stop the thread and send the final ``stopped`` ping. Idempotent."""
+        """Stop the thread and send the final ``stopped`` ping. Idempotent.
+
+        Exit-latency budget: an in-flight ping can hold the join for at most
+        ``ping_timeout``; the final ping gets ``final_ping_timeout``. A dead
+        endpoint therefore delays process exit by a bounded few seconds, not
+        by the interval.
+        """
         with self._lock:
             if self._stopped:
                 return
             self._stopped = True
+        _active_senders.discard(self)
+        atexit.unregister(self.stop)
         self._stop_event.set()
         if self._thread is not None:
-            self._thread.join(timeout=self._interval + 1.0)
+            self._thread.join(timeout=self._ping_timeout + 1.0)
         self._send_ping(stopped=True)
 
     def _run(self) -> None:
@@ -175,6 +224,9 @@ class HeartbeatSender:
         self._instance_id = str(uuid.uuid4())
         self._stop_event = threading.Event()
         self.start()
+
+    def __del__(self) -> None:  # pragma: no cover — GC-timing dependent
+        atexit.unregister(self.stop)
 
     def _build_payload(self, *, stopped: bool = False) -> dict[str, Any]:
         open_ids = self._tracker.open_trace_ids()
@@ -195,8 +247,9 @@ class HeartbeatSender:
         return payload
 
     def _send_ping(self, *, stopped: bool = False) -> None:
+        timeout = self._final_ping_timeout if stopped else self._ping_timeout
         try:
-            self._transport(self._build_payload(stopped=stopped))
+            self._send(self._build_payload(stopped=stopped), timeout)
         except Exception as exc:  # noqa: BLE001 — never raises into user code
             if not self._delivery_warned:
                 self._delivery_warned = True

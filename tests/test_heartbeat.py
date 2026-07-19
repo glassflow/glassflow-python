@@ -385,3 +385,64 @@ def test_atexit_sends_stopped_ping_from_real_process() -> None:
     finally:
         server.shutdown()
         thread.join(timeout=5)
+
+
+# ---------------------------------------------------------------------------
+# Shutdown latency & resource hygiene (security/robustness review)
+# ---------------------------------------------------------------------------
+
+
+def test_stop_with_dead_slow_endpoint_returns_quickly() -> None:
+    """A dead endpoint must not hold the user's process exit hostage."""
+    import socket
+    import time
+
+    # A socket that accepts but never responds — the worst-case endpoint.
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    try:
+        url = f"http://127.0.0.1:{listener.getsockname()[1]}/v1/heartbeat"
+        sender = HeartbeatSender(
+            url=url,
+            headers={},
+            interval=3600.0,
+            agent_name="a",
+            tracker=OpenRootSpanTracker(),
+            ping_timeout=0.3,
+            final_ping_timeout=0.3,
+        )
+        sender.start()
+        time.sleep(0.05)  # let the first (hanging) ping get in flight
+        started = time.monotonic()
+        sender.stop()
+        elapsed = time.monotonic() - started
+        # bound: in-flight ping timeout + final ping timeout + slack
+        assert elapsed < 2.0, f"stop() took {elapsed:.2f}s against a dead endpoint"
+    finally:
+        listener.close()
+
+
+def test_final_ping_timeout_defaults_shorter_than_ping_timeout() -> None:
+    sender = HeartbeatSender(
+        url="u",
+        headers={},
+        interval=3600.0,
+        agent_name="a",
+        tracker=OpenRootSpanTracker(),
+    )
+    assert sender._final_ping_timeout < sender._ping_timeout  # noqa: SLF001
+    assert sender._final_ping_timeout == 1.0  # noqa: SLF001
+
+
+def test_stopped_senders_leave_the_fork_registry() -> None:
+    """init/shutdown cycles must not accumulate fork-handler references."""
+    from glassflow.heartbeat import _active_senders
+
+    before = len(_active_senders)
+    sent: list[dict[str, Any]] = []
+    sender = _sender(sent)
+    sender.start()
+    assert len(_active_senders) == before + 1
+    sender.stop()
+    assert len(_active_senders) == before
