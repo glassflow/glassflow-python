@@ -21,6 +21,15 @@ ENV_SERVICE_NAME = "GLASSFLOW_SERVICE_NAME"
 ENV_DISABLED = "GLASSFLOW_DISABLED"
 ENV_SAMPLE_RATE = "GLASSFLOW_SAMPLE_RATE"
 ENV_CAPTURE_CONTENT = "GLASSFLOW_CAPTURE_CONTENT"
+ENV_HEARTBEAT = "GLASSFLOW_HEARTBEAT"
+ENV_HEARTBEAT_INTERVAL = "GLASSFLOW_HEARTBEAT_INTERVAL"
+ENV_AGENT_NAME = "GLASSFLOW_AGENT_NAME"
+
+# The backend expresses staleness as multiples of the interval, so the clamp
+# bounds are part of the heartbeat wire contract.
+HEARTBEAT_INTERVAL_MIN = 5.0
+HEARTBEAT_INTERVAL_MAX = 300.0
+DEFAULT_HEARTBEAT_INTERVAL = 15.0
 
 _TRUENESS = frozenset({"1", "true", "yes", "on"})
 
@@ -57,11 +66,19 @@ class GlassflowConfig:
     disabled: bool = False
     sample_rate: float = 1.0
     capture_content: bool = True
+    heartbeat: bool = False
+    heartbeat_interval: float = DEFAULT_HEARTBEAT_INTERVAL
+    agent_name: str = DEFAULT_SERVICE_NAME
 
     @property
     def traces_endpoint(self) -> str:
         """Full OTLP/HTTP traces URL (``<endpoint>/v1/traces``)."""
         return self.endpoint.rstrip("/") + "/v1/traces"
+
+    @property
+    def heartbeat_endpoint(self) -> str:
+        """Heartbeat URL (``<endpoint>/v1/heartbeat``) — same host as traces."""
+        return self.endpoint.rstrip("/") + "/v1/heartbeat"
 
 
 def _clamp_sample_rate(value: float) -> float:
@@ -70,6 +87,21 @@ def _clamp_sample_rate(value: float) -> float:
         return value
     clamped = min(max(value, 0.0), 1.0)
     logger.warning("sample_rate %s is outside [0.0, 1.0]; clamped to %s", value, clamped)
+    return clamped
+
+
+def _clamp_heartbeat_interval(value: float) -> float:
+    """Clamp to the contract bounds — out-of-range degrades, never crashes init()."""
+    if HEARTBEAT_INTERVAL_MIN <= value <= HEARTBEAT_INTERVAL_MAX:
+        return value
+    clamped = min(max(value, HEARTBEAT_INTERVAL_MIN), HEARTBEAT_INTERVAL_MAX)
+    logger.warning(
+        "heartbeat_interval %s is outside [%s, %s]; clamped to %s",
+        value,
+        HEARTBEAT_INTERVAL_MIN,
+        HEARTBEAT_INTERVAL_MAX,
+        clamped,
+    )
     return clamped
 
 
@@ -82,6 +114,9 @@ def resolve_config(
     disabled: bool | None = None,
     sample_rate: float | None = None,
     capture_content: bool | None = None,
+    heartbeat: bool | None = None,
+    heartbeat_interval: float | None = None,
+    agent_name: str | None = None,
 ) -> GlassflowConfig:
     """Resolve SDK configuration from arguments, environment, then defaults.
 
@@ -104,6 +139,15 @@ def resolve_config(
             (``GLASSFLOW_SAMPLE_RATE``).
         capture_content: When ``False``, content attributes are stripped at
             export (``GLASSFLOW_CAPTURE_CONTENT``).
+        heartbeat: Enable the agent-lifetime heartbeat thread
+            (``GLASSFLOW_HEARTBEAT``). Off by default this release.
+        heartbeat_interval: Seconds between pings
+            (``GLASSFLOW_HEARTBEAT_INTERVAL``), clamped to ``[5, 300]`` —
+            the backend derives staleness from this, so the bounds are part
+            of the wire contract.
+        agent_name: Identity heartbeats group under (``GLASSFLOW_AGENT_NAME``);
+            defaults to ``service_name`` so the agents view and the traces
+            view agree on what an "agent" is.
 
     Returns:
         The resolved, immutable ``GlassflowConfig``.
@@ -119,6 +163,14 @@ def resolve_config(
         _env_bool(ENV_CAPTURE_CONTENT, default=True) if capture_content is None else capture_content
     )
 
+    resolved_heartbeat = _env_bool(ENV_HEARTBEAT, default=False) if heartbeat is None else heartbeat
+    resolved_heartbeat_interval = _clamp_heartbeat_interval(
+        _env_float(ENV_HEARTBEAT_INTERVAL, default=DEFAULT_HEARTBEAT_INTERVAL)
+        if heartbeat_interval is None
+        else heartbeat_interval
+    )
+    resolved_agent_name = agent_name or os.getenv(ENV_AGENT_NAME) or resolved_service_name
+
     resolved_headers = dict(headers or {})
     has_auth = any(key.lower() == "authorization" for key in resolved_headers)
     if resolved_api_key and not has_auth:
@@ -132,4 +184,7 @@ def resolve_config(
         disabled=resolved_disabled,
         sample_rate=resolved_sample_rate,
         capture_content=resolved_capture_content,
+        heartbeat=resolved_heartbeat,
+        heartbeat_interval=resolved_heartbeat_interval,
+        agent_name=resolved_agent_name,
     )

@@ -16,6 +16,7 @@ from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
 from . import __version__
 from .config import GlassflowConfig, resolve_config
+from .heartbeat import HeartbeatSender, OpenRootSpanTracker
 from .instrumentation import enable_instrumentations
 from .masking import MaskingSpanExporter
 from .semconv import TRACER_NAME
@@ -50,9 +51,15 @@ class GlassflowClient:
     configuration is available as ``client.config``.
     """
 
-    def __init__(self, provider: TracerProvider, config: GlassflowConfig) -> None:
+    def __init__(
+        self,
+        provider: TracerProvider,
+        config: GlassflowConfig,
+        heartbeat: HeartbeatSender | None = None,
+    ) -> None:
         self._provider = provider
         self.config = config
+        self._heartbeat = heartbeat
         self._is_shutdown = False
 
     def get_tracer(self, name: str = TRACER_NAME) -> trace.Tracer:
@@ -68,8 +75,14 @@ class GlassflowClient:
         return self._provider.force_flush(timeout_millis)
 
     def shutdown(self) -> None:
-        """Drain pending spans and stop. Releases the global init() slot."""
+        """Drain pending spans and stop. Releases the global init() slot.
+
+        Also stops the heartbeat thread and sends its final ``stopped`` ping,
+        so the backend can tell a clean shutdown from a vanished agent.
+        """
         global _current_client
+        if self._heartbeat is not None:
+            self._heartbeat.stop()
         self._provider.shutdown()
         self._is_shutdown = True
         with _lock:
@@ -89,6 +102,10 @@ def init(
     mask: Callable[[Any], Any] | None = None,
     instruments: Sequence[str] | None = None,
     span_exporter: SpanExporter | None = None,
+    heartbeat: bool | None = None,
+    heartbeat_interval: float | None = None,
+    agent_name: str | None = None,
+    heartbeat_transport: Callable[[dict[str, Any]], None] | None = None,
     set_global: bool = True,
 ) -> GlassflowClient:
     """Initialize the SDK: build a tracer provider that exports OTLP traces.
@@ -112,6 +129,16 @@ def init(
             Instrumentors are process-global, so with ``set_global=False`` they
             are only enabled when ``instruments`` is passed explicitly.
         span_exporter: Override the default OTLP exporter (useful for testing).
+        heartbeat: Enable the agent-lifetime heartbeat thread
+            (``GLASSFLOW_HEARTBEAT``; default off this release). Pings
+            ``<endpoint>/v1/heartbeat`` from init until process exit so the
+            platform can tell a live-but-idle agent from a vanished one.
+        heartbeat_interval: Seconds between pings (default 15, clamped to
+            ``[5, 300]`` — the backend derives staleness from this).
+        agent_name: Identity heartbeats group under; defaults to
+            ``service_name``.
+        heartbeat_transport: Override the heartbeat HTTP transport
+            (useful for testing, like ``span_exporter``).
         set_global: Register the provider as the global OpenTelemetry provider.
     """
     global _current_client
@@ -134,6 +161,10 @@ def init(
             mask=mask,
             instruments=instruments,
             span_exporter=span_exporter,
+            heartbeat=heartbeat,
+            heartbeat_interval=heartbeat_interval,
+            agent_name=agent_name,
+            heartbeat_transport=heartbeat_transport,
             set_global=set_global,
         )
 
@@ -150,6 +181,10 @@ def _do_init(
     mask: Callable[[Any], Any] | None,
     instruments: Sequence[str] | None,
     span_exporter: SpanExporter | None,
+    heartbeat: bool | None,
+    heartbeat_interval: float | None,
+    agent_name: str | None,
+    heartbeat_transport: Callable[[dict[str, Any]], None] | None,
     set_global: bool,
 ) -> GlassflowClient:
     global _current_client
@@ -161,6 +196,9 @@ def _do_init(
         disabled=disabled,
         sample_rate=sample_rate,
         capture_content=capture_content,
+        heartbeat=heartbeat,
+        heartbeat_interval=heartbeat_interval,
+        agent_name=agent_name,
     )
     # telemetry.sdk.* is reserved for the OTel SDK itself (Resource.create fills
     # it); we identify as a distribution via telemetry.distro.*.
@@ -197,7 +235,24 @@ def _do_init(
     if not config.disabled and (set_global or instruments is not None):
         enable_instrumentations(provider, instruments)
 
-    client = GlassflowClient(provider, config)
+    # Heartbeat: process-lifetime liveness, independent of trace
+    # traffic. The tracker rides the provider as a span processor so payloads
+    # can carry the currently-open root trace ids; disabled kills it too.
+    sender: HeartbeatSender | None = None
+    if config.heartbeat and not config.disabled:
+        tracker = OpenRootSpanTracker()
+        provider.add_span_processor(tracker)
+        sender = HeartbeatSender(
+            url=config.heartbeat_endpoint,
+            headers=config.headers,
+            interval=config.heartbeat_interval,
+            agent_name=config.agent_name,
+            tracker=tracker,
+            transport=heartbeat_transport,
+        )
+        sender.start()
+
+    client = GlassflowClient(provider, config, heartbeat=sender)
     if set_global:
         _current_client = client
     return client
