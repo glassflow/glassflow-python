@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/glassflow/glassflow-python/compare/v0.5.0...v0.6.0) (2026-07-20)
+
+
+### Features
+
+* agent-lifetime heartbeat sender ([#32](https://github.com/glassflow/glassflow-python/issues/32)) ([7c592a8](https://github.com/glassflow/glassflow-python/commit/7c592a8822341e06b9bcd444502530a84dc80679))
+
 ## [0.5.0](https://github.com/glassflow/glassflow-python/compare/v0.4.1...v0.5.0) (2026-07-15)
 
 
